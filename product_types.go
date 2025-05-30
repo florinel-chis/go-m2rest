@@ -14,14 +14,14 @@ type MediaGalleryEntries struct {
 	Types               []string               `json:"types"`
 	File                string                 `json:"file"`
 	Content             Content                `json:"content"`
-	ExtensionAttributes map[string]interface{} `json:"extension_attributes"`
+	ExtensionAttributes map[string]any `json:"extension_attributes"`
 }
 
 type TierPrices struct {
 	CustomerGroupID     int                    `json:"customer_group_id"`
 	Qty                 float64                `json:"qty"`
 	Value               float64                `json:"value"`
-	ExtensionAttributes map[string]interface{} `json:"extension_attributes"`
+	ExtensionAttributes map[string]any `json:"extension_attributes"`
 }
 
 type ProductLinks struct {
@@ -30,7 +30,7 @@ type ProductLinks struct {
 	LinkedProductSku    string                 `json:"linked_product_sku"`
 	LinkedProductType   string                 `json:"linked_product_type"`
 	Position            int                    `json:"position"`
-	ExtensionAttributes map[string]interface{} `json:"extension_attributes"`
+	ExtensionAttributes map[string]any `json:"extension_attributes"`
 }
 
 type Product struct {
@@ -45,12 +45,12 @@ type Product struct {
 	CreatedAt           string                   `json:"created_at,omitempty"`
 	UpdatedAt           string                   `json:"updated_at,omitempty"`
 	Weight              float64                  `json:"weight,omitempty"`
-	ExtensionAttributes map[string]interface{}   `json:"extension_attributes,omitempty"`
+	ExtensionAttributes map[string]any   `json:"extension_attributes,omitempty"`
 	ProductLinks        []ProductLinks           `json:"product_links,omitempty"`
 	Options             []Options                `json:"options,omitempty"`
 	MediaGalleryEntries []MediaGalleryEntries    `json:"media_gallery_entries,omitempty"`
 	TierPrices          []TierPrices             `json:"tier_prices,omitempty"`
-	CustomAttributes    []map[string]interface{} `json:"custom_attributes,omitempty"`
+	CustomAttributes    []map[string]any `json:"custom_attributes,omitempty"`
 }
 
 type Content struct {
@@ -92,7 +92,7 @@ type Options struct {
 	ImageSizeX          int                    `json:"image_size_x,omitempty"`
 	ImageSizeY          int                    `json:"image_size_y,omitempty"`
 	Values              []Values               `json:"values,omitempty"`
-	ExtensionAttributes map[string]interface{} `json:"extension_attributes,omitempty"`
+	ExtensionAttributes map[string]any `json:"extension_attributes,omitempty"`
 }
 
 type StockItem struct {
@@ -122,7 +122,7 @@ type StockItem struct {
 	LowStockDate                   string                 `json:"low_stock_date,omitempty"`
 	IsDecimalDivided               bool                   `json:"is_decimal_divided,omitempty"`
 	StockStatusChangedAuto         int                    `json:"stock_status_changed_auto,omitempty"`
-	ExtensionAttributes            map[string]interface{} `json:"extension_attributes,omitempty"`
+	ExtensionAttributes            map[string]any `json:"extension_attributes,omitempty"`
 }
 
 type updateStockPayload struct {

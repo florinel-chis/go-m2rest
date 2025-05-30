@@ -32,7 +32,7 @@ type Cart struct {
 	CustomerNoteNotify  bool                   `json:"customer_note_notify"`
 	CustomerTaxClassID  int                    `json:"customer_tax_class_id"`
 	StoreID             int                    `json:"store_id"`
-	ExtensionAttributes map[string]interface{} `json:"extension_attributes"`
+	ExtensionAttributes map[string]any `json:"extension_attributes"`
 }
 
 type CartItem struct {
@@ -44,11 +44,11 @@ type CartItem struct {
 	ProductType         string                 `json:"product_type,omitempty"`
 	QuoteID             string                 `json:"quote_id"`
 	ProductOption       CartProductOption      `json:"product_option,omitempty"`
-	ExtensionAttributes map[string]interface{} `json:"extension_attributes,omitempty"`
+	ExtensionAttributes map[string]any `json:"extension_attributes,omitempty"`
 }
 
 type CartProductOption struct {
-	ExtensionAttributes map[string]interface{} `json:"extension_attributes,omitempty"`
+	ExtensionAttributes map[string]any `json:"extension_attributes,omitempty"`
 }
 
 type Customer struct {
@@ -73,8 +73,8 @@ type Customer struct {
 	WebsiteID              int                      `json:"website_id,omitempty"`
 	Addresses              []Address                `json:"addresses,omitempty"`
 	DisableAutoGroupChange int                      `json:"disable_auto_group_change,omitempty"`
-	ExtensionAttributes    map[string]interface{}   `json:"extension_attributes,omitempty"`
-	CustomAttributes       []map[string]interface{} `json:"custom_attributes,omitempty"`
+	ExtensionAttributes    map[string]any   `json:"extension_attributes,omitempty"`
+	CustomAttributes       []map[string]any `json:"custom_attributes,omitempty"`
 }
 
 type Currency struct {
@@ -86,7 +86,7 @@ type Currency struct {
 	StoreToQuoteRate    int                    `json:"store_to_quote_rate,omitempty"`
 	BaseToGlobalRate    int                    `json:"base_to_global_rate,omitempty"`
 	BaseToQuoteRate     int                    `json:"base_to_quote_rate,omitempty"`
-	ExtensionAttributes map[string]interface{} `json:"extension_attributes,omitempty"`
+	ExtensionAttributes map[string]any `json:"extension_attributes,omitempty"`
 }
 
 type AddressInformation struct {
@@ -94,8 +94,8 @@ type AddressInformation struct {
 	BillingAddress       *BillingAddress          `json:"billing_address"`
 	ShippingMethodCode   string                   `json:"shipping_method_code"`
 	ShippingCarrierCodes string                   `json:"shipping_carrier_code"`
-	ExtensionAttributes  map[string]interface{}   `json:"extension_attributes,omitempty"`
-	CustomAttributes     []map[string]interface{} `json:"custom_attributes,omitempty"`
+	ExtensionAttributes  map[string]any   `json:"extension_attributes,omitempty"`
+	CustomAttributes     []map[string]any `json:"custom_attributes,omitempty"`
 }
 
 type PaymentMethodCode struct {
@@ -106,19 +106,19 @@ type Region struct {
 	RegionCode          string                 `json:"region_code,omitempty"`
 	Region              string                 `json:"region,omitempty"`
 	RegionID            int                    `json:"region_id,omitempty"`
-	ExtensionAttributes map[string]interface{} `json:"extension_attributes,omitempty"`
+	ExtensionAttributes map[string]any `json:"extension_attributes,omitempty"`
 }
 
 type Shipping struct {
 	Address             Address                `json:"address,omitempty"`
 	Method              string                 `json:"method,omitempty"`
-	ExtensionAttributes map[string]interface{} `json:"extension_attributes,omitempty"`
+	ExtensionAttributes map[string]any `json:"extension_attributes,omitempty"`
 }
 
 type ShippingAssignments struct {
 	Shipping            Shipping               `json:"shipping,omitempty"`
 	Items               []Item                 `json:"items,omitempty"`
-	ExtensionAttributes map[string]interface{} `json:"extension_attributes,omitempty"`
+	ExtensionAttributes map[string]any `json:"extension_attributes,omitempty"`
 }
 
 type PaymentMethod struct {

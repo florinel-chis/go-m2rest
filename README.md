@@ -2,136 +2,294 @@
 
 [![GoDoc](https://godoc.org/github.com/florinel-chis/go-m2rest?status.svg)](https://godoc.org/github.com/florinel-chis/go-m2rest)
 
-**A Verbose and Robust Golang Library for Magento 2 REST API Interaction**
+**A Modern and Robust Golang Library for Magento 2 REST API**
 
-This Golang library, **`go-m2rest`**, provides a comprehensive and well-documented interface for interacting with the Magento 2 REST API. Built with best practices in mind, including verbose logging for debugging and error tracking, this library aims to simplify and streamline your Magento 2 REST API integrations in Go.
+This Golang library provides a comprehensive interface for interacting with the Magento 2 REST API. Built with modern Go practices (1.21+), it features structured logging, concurrent operations, and extensive test coverage.
 
 ## Features
 
-* **Verbose Logging:** Every API request and response is logged with detailed information, making debugging and monitoring significantly easier.
-* **Robust Error Handling:**  Provides structured error handling, including custom error types for common Magento 2 API issues (like `ErrNotFound`, `ItemNotFoundError`, `ErrNoPointer`, `ErrBadRequest`).
-* **Authentication Support:** Supports both Customer and Administrator API authentication methods, including token-based integration.
-* **Comprehensive API Coverage:** Implements a wide range of Magento 2 REST API endpoints, including:
-    * **Products:** Create, retrieve, update products, manage stock items.
-    * **Categories:** Create, retrieve, update categories, assign products to categories.
-    * **Attributes & Attribute Sets:** Create, retrieve, update attributes and attribute sets, assign attributes to sets and groups.
-    * **Configurable Products:** Create and manage configurable products, set options, add child products.
-    * **Orders:** Retrieve orders by increment ID, update order entities, add order comments.
-    * **Carts:** Guest and Customer cart management, add items, estimate shipping and payment methods, place orders, delete cart items.
-* **Well-Structured Code:** Follows Go best practices with clear package structure, idiomatic Go code, and comprehensive documentation.
-* **Retries:** Implements automatic retry logic for transient errors like `503 Service Unavailable` and `500 Internal Server Error`.
+* **Modern Go Practices:** Uses Go 1.21+ features including the `any` type, structured errors with wrapping, and context support (coming soon)
+* **Comprehensive Logging:** Structured logging with zerolog for better debugging and monitoring
+* **Robust Error Handling:** Custom error types for common Magento 2 API scenarios
+* **Authentication Support:** Multiple authentication methods including Integration tokens, Customer tokens, and Admin credentials
+* **Extensive API Coverage:**
+    * **Products:** Simple, configurable, bundle, grouped, and virtual products
+    * **Categories:** Full hierarchy management and product assignments
+    * **Attributes:** Create and manage product attributes with options
+    * **Carts:** Guest and customer cart management with full checkout flow
+    * **Orders:** Order retrieval, updates, and comments
+    * **Stock Management:** Inventory updates and stock status
+* **Performance Features:**
+    * Automatic retry logic for transient errors
+    * Concurrent operations support
+    * Connection pooling via resty v2
 
 ## Getting Started
 
 ### Prerequisites
 
-1. **Go Installation:** Ensure you have Go 1.16 or later installed. You can download it from [https://go.dev/dl/](https://go.dev/dl/).
-2. **Magento 2 Setup:** You need a running Magento 2 instance with the REST API enabled.
-3. **Magento 2 API Credentials:** Depending on the API you want to use (Admin or Customer), you'll need to set up the necessary integrations or customer accounts in Magento 2 to obtain authentication credentials.
+1. **Go 1.21+** - Required for modern Go features
+2. **Magento 2 Instance** - With REST API enabled
+3. **API Credentials** - Integration token or admin/customer credentials
 
 ### Installation
-
-To install **`go-m2rest`**, use `go get`:
 
 ```bash
 go get github.com/florinel-chis/go-m2rest
 ```
 
-### Usage
-
-Here's a basic example of how to use **`go-m2rest`** to create a product in Magento 2 using Administrator API authentication:
+### Quick Start
 
 ```go
 package main
 
 import (
-	"log"
-
-	"github.com/florinel-chis/go-m2rest"
+    "log"
+    "github.com/florinel-chis/go-m2rest"
 )
 
 func main() {
-	logger := log.New(log.Writer(), "admin-api-example: ", log.LstdFlags|log.Lshortfile)
-	magento2.SetLogger(logger) // Set a custom logger for verbose output
+    // Configure store connection
+    storeConfig := &magento2.StoreConfig{
+        Scheme:    "https",
+        HostName:  "your-store.com",
+        StoreCode: "default",
+    }
 
-	// 1. Configure Store Settings
-	storeConfig := &magento2.StoreConfig{
-		Scheme:    "https",          // or "http" depending on your Magento setup
-		HostName:  "magento2.example.com", // Replace with your Magento 2 hostname
-		StoreCode: "default",        // Replace with your store code if needed
-	}
+    // Create API client with integration token
+    client, err := magento2.NewAPIClientFromIntegration(
+        storeConfig, 
+        "your_integration_token",
+    )
+    if err != nil {
+        log.Fatal(err)
+    }
 
-	// 2. Administrator API Authentication (Integration Token)
-	bearerToken := "YOUR_ADMIN_INTEGRATION_TOKEN" // Replace with your Admin Integration Token
+    // Create a simple product
+    product := magento2.Product{
+        Sku:            "test-product-001",
+        Name:           "Test Product",
+        Price:          29.99,
+        TypeID:         "simple",
+        AttributeSetID: 4,
+        Status:         1,
+        Visibility:     4,
+        Weight:         1.0,
+    }
 
-	// 3. Create API Client
-	apiClient, err := magento2.NewAPIClientFromIntegration(storeConfig, bearerToken)
-	if err != nil {
-		panic(err)
-	}
-	logger.Printf("Obtained client: '%+v'", apiClient)
+    mProduct, err := magento2.CreateOrReplaceProduct(&product, true, client)
+    if err != nil {
+        log.Fatal(err)
+    }
 
-	// 4. Define Product Details
-	product := magento2.Product{
-		Name:           "Example Product",
-		Sku:            "example-sku-123",
-		Price:          99.99,
-		AttributeSetID: 4, // Default attribute set ID
-		TypeID:         "simple",
-	}
-	productSaveOptions := true // Set to true to save product options
-
-	// 5. Create Product in Magento 2
-	mProduct, err := magento2.CreateOrReplaceProduct(&product, productSaveOptions, apiClient)
-	if err != nil {
-		panic(err)
-	}
-
-	logger.Printf("Created product: %+v", mProduct)
+    log.Printf("Created product: %s (ID: %d)", 
+        mProduct.Product.Sku, 
+        mProduct.Product.ID)
 }
 ```
 
-**Key steps in the example:**
+## Testing
 
-1. **Import the library:** `import "github.com/florinel-chis/go-m2rest"`
-2. **Set up Logger:**  Optionally set a custom logger for more detailed output using `magento2.SetLogger()`.
-3. **Configure `StoreConfig`:** Provide your Magento 2 instance's scheme, hostname, and store code.
-4. **Authentication:** Choose the appropriate authentication method and provide credentials. The example uses Administrator API authentication with an Integration token.
-5. **Create `APIClient`:** Instantiate the `APIClient` using `NewAPIClientFromIntegration` (or other `NewAPIClientFrom...` functions based on your authentication type).
-6. **Define Magento 2 entities:** Create Go structs representing Magento 2 objects like `Product`, `Category`, `Attribute`, etc.
-7. **Use library functions:** Call functions from the `magento2` package (e.g., `CreateOrReplaceProduct`, `GetProductBySKU`, `NewGuestCartFromAPIClient`, etc.) to interact with the Magento 2 API.
-8. **Handle Errors:** Check for errors returned by the library functions and handle them appropriately.
-9. **Verbose Logging:** Observe the detailed logs in your console output to track API requests, responses, and potential issues.
+The library includes comprehensive test coverage with both unit and functional tests.
 
-**Authentication Methods**
+### Running Tests
 
-This library supports the following authentication methods:
+```bash
+# Run all tests
+go test ./...
 
-* **Administrator API (Integration Token):** Use `NewAPIClientFromIntegration(storeConfig *StoreConfig, bearer string)` with an Admin Integration token.
-* **Customer API (Customer Token):** Use `NewAPIClientFromAuthentication(storeConfig *StoreConfig, payload AuthenticationRequestPayload, authenticationType AuthenticationType)` with customer username and password and `magento2.CustomerAuth` as `authenticationType`.
-* **Administrator API (Admin Credentials):** Use `NewAPIClientFromAuthentication(storeConfig *StoreConfig, payload AuthenticationRequestPayload, authenticationType AuthenticationType)` with admin username and password and `magento2.Administrator` as `authenticationType`.
-* **Guest API (No Authentication):** Use `NewAPIClientWithoutAuthentication(storeConfig *StoreConfig)` for operations that don't require authentication (like guest cart management).
+# Run tests from the tests directory
+go test ./tests -v
 
-**Examples**
+# Run specific test
+go test ./tests -run TestAdvancedProducts_VirtualProduct -v
+```
 
-You can find more detailed examples in the `examples/` directory of this repository. These examples cover various use cases like:
+### Test Configuration
 
-* Placing orders as a guest and a customer.
-* Creating products, attributes, attribute sets, and categories using the Admin API.
-* Managing configurable products.
+Create a `.env` file in the project root:
+
+```env
+MAGENTO_HOST=http://your-magento-site.com
+MAGENTO_BEARER_TOKEN=your_integration_token
+MAGENTO_STORE_CODE=default
+TEST_DEBUG=true
+```
+
+## Bulk Operations
+
+The library includes utilities for bulk operations. See the `scripts/` directory for examples.
+
+### Bulk Product Creation and Stock Update
+
+```bash
+cd scripts
+./run_bulk_update.sh stock_updates.csv 100 10 both
+```
+
+This will:
+- Create 100 simple products
+- Update their stock from the CSV file
+- Use 10 concurrent operations
+
+## Advanced Usage
+
+### Working with Different Product Types
+
+```go
+// Virtual Product (no shipping)
+virtualProduct := magento2.Product{
+    Sku:    "virtual-service-001",
+    Name:   "Virtual Service",
+    TypeID: "virtual",
+    Price:  99.99,
+    // No weight needed for virtual products
+}
+
+// Grouped Product
+groupedProduct := magento2.Product{
+    Sku:    "grouped-product-001",
+    Name:   "Product Bundle",
+    TypeID: "grouped",
+    // Price comes from associated products
+}
+
+// Configurable Product
+configurableProduct := magento2.Product{
+    Sku:    "configurable-001",
+    Name:   "T-Shirt",
+    TypeID: "configurable",
+    // Requires attribute configuration
+}
+```
+
+### Cart Operations
+
+```go
+// Create guest cart
+guestCart, err := magento2.NewGuestCartFromAPIClient(client)
+
+// Add items
+item := magento2.CartItem{
+    Sku:     "test-product-001",
+    Qty:     2,
+    QuoteID: guestCart.QuoteID,
+}
+err = guestCart.AddItems([]magento2.CartItem{item})
+
+// Estimate shipping
+shippingAddr := &magento2.ShippingAddress{
+    Address: magento2.Address{
+        CountryID: "US",
+        Postcode:  "10001",
+        City:      "New York",
+        Street:    []string{"123 Main St"},
+        Firstname: "John",
+        Lastname:  "Doe",
+        Telephone: "555-1234",
+        Email:     "john@example.com",
+    },
+}
+carriers, err := guestCart.EstimateShippingCarrier(shippingAddr)
+```
+
+## API Coverage
+
+### Products API
+- `CreateOrReplaceProduct()` - Create or update products
+- `GetProductBySKU()` - Retrieve product details
+- `UpdateProductStockItemBySKU()` - Update inventory
+- Support for all product types
+
+### Categories API
+- `CreateCategory()` - Create categories
+- `GetCategoryByID()` - Retrieve category details
+- `GetCategoriesList()` - List all categories
+- `AssignProductsToCategoryByID()` - Manage product assignments
+
+### Attributes API
+- `CreateAttribute()` - Create product attributes
+- `GetAttributeByCode()` - Retrieve attribute details
+- `AddOption()` - Add dropdown options
+- Attribute set and group management
+
+### Cart API
+- Guest and customer cart support
+- Add/remove items
+- Shipping and payment estimation
+- Order placement
+
+### Orders API
+- `GetOrderByIncrementID()` - Retrieve orders
+- `UpdateOrderEntity()` - Update order status
+- `AddOrderComment()` - Add order notes
+
+## Project Structure
+
+```
+go-m2rest/
+├── *.go                 # Main library files
+├── tests/              # Test files
+│   ├── functional_test.go
+│   ├── advanced_product_test.go
+│   └── test_config.go
+├── scripts/            # Utility scripts
+│   ├── bulk_product_update.go
+│   └── run_bulk_update.sh
+├── .env.example        # Example configuration
+└── README.md           # This file
+```
+
+## Error Handling
+
+The library provides structured error types:
+
+```go
+product, err := magento2.GetProductBySKU("non-existent", client)
+if err != nil {
+    if err == magento2.ErrNotFound {
+        // Handle not found case
+    } else {
+        // Handle other errors
+    }
+}
+```
+
+## Logging
+
+The library uses zerolog for structured logging:
+
+```go
+// Logs are automatically structured with context
+// Output includes API endpoints, payloads, and responses
+```
 
 ## Contributing
 
-Contributions are welcome! If you find bugs, have feature requests, or want to contribute code, please open an issue or submit a pull request on GitHub.
+Contributions are welcome! Please:
 
-Please follow these guidelines when contributing:
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new functionality
+4. Ensure all tests pass
+5. Submit a pull request
 
-1.  **Fork the repository.**
-2.  **Create a branch** for your feature or bug fix.
-3.  **Write tests** for your code.
-4.  **Ensure all tests pass** before submitting a pull request.
-5.  **Follow Go coding conventions** and style.
-6.  **Document your code** clearly.
+### Development Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/florinel-chis/go-m2rest.git
+cd go-m2rest
+
+# Install dependencies
+go mod download
+
+# Run tests
+go test ./...
+
+# Run linter (optional)
+golangci-lint run
+```
 
 ## License
 
@@ -139,9 +297,20 @@ This project is licensed under the [MIT License](LICENSE).
 
 ## Support
 
-If you encounter any issues or have questions, please open an issue on GitHub at [https://github.com/florinel-chis/go-m2rest/issues](https://github.com/florinel-chis/go-m2rest/issues).
+For issues, feature requests, or questions:
+- Open an issue on [GitHub](https://github.com/florinel-chis/go-m2rest/issues)
+- Check the [GoDoc](https://godoc.org/github.com/florinel-chis/go-m2rest) for API documentation
+
+## Changelog
+
+### Recent Updates
+- Added support for Go 1.21+ features
+- Migrated to resty v2 for better performance
+- Added structured logging with zerolog
+- Improved test coverage and organization
+- Added bulk operations utilities
+- Enhanced error handling with wrapped errors
 
 ---
 
-**Enjoy building amazing Magento 2 REST API integrations with Go using `go-m2rest`!**
-```
+**Build robust Magento 2 integrations with modern Go!**

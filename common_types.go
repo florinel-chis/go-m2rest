@@ -22,8 +22,8 @@ type Address struct {
 	SameAsBilling       int                      `json:"same_as_billing,omitempty"`
 	CustomerAddressID   int                      `json:"customer_address_id,omitempty"`
 	SaveInAddressBook   int                      `json:"save_in_address_book,omitempty"`
-	ExtensionAttributes map[string]interface{}   `json:"extension_attributes,omitempty"`
-	CustomAttributes    []map[string]interface{} `json:"custom_attributes,omitempty"`
+	ExtensionAttributes map[string]any   `json:"extension_attributes,omitempty"`
+	CustomAttributes    []map[string]any `json:"custom_attributes,omitempty"`
 }
 
 type BillingAddress struct {

@@ -5,19 +5,17 @@ import (
 	"net/http"
 
 	"github.com/rs/zerolog/log"
-	"gopkg.in/resty.v1"
+	"github.com/go-resty/resty/v2"
 )
 
-var ErrBadRequest = fmt.Errorf("%s", "bad request")
-var ErrNotFound = fmt.Errorf("%s", "not found") // Declare ErrNotFound here if it's not already declared elsewhere
 
-func wrapError(err error, triedTo string, response ...map[string]interface{}) error {
+func wrapError(err error, triedTo string, response ...map[string]any) error {
 	if len(response) == 0 {
 		log.Error().Err(err).Str("operation", triedTo).Msg("Error while trying to")
-		return fmt.Errorf("error while trying to %w - %s", err, triedTo)
+		return fmt.Errorf("error while trying to %s: %w", triedTo, err)
 	}
 	log.Error().Err(err).Str("operation", triedTo).Interface("responseDetails", response).Msg("Error while trying to, with response details")
-	return fmt.Errorf("error while trying to %w - %s. %+v", err, triedTo, response)
+	return fmt.Errorf("error while trying to %s (response: %+v): %w", triedTo, response, err)
 }
 
 func mayReturnErrorForHTTPResponse(resp *resty.Response, triedTo string) error {
@@ -30,7 +28,7 @@ func mayReturnErrorForHTTPResponse(resp *resty.Response, triedTo string) error {
 				Msg("Not found error")
 			return ErrNotFound
 		} else if resp.StatusCode() >= http.StatusBadRequest {
-			additional := map[string]interface{}{
+			additional := map[string]any{
 				"statusCode": resp.StatusCode(),
 				"response":   string(resp.Body()),
 			}
@@ -42,7 +40,7 @@ func mayReturnErrorForHTTPResponse(resp *resty.Response, triedTo string) error {
 			return wrapError(ErrBadRequest, triedTo, additional)
 		}
 		// For other non-2xx and non-404 errors, still wrap and log
-		additional := map[string]interface{}{
+		additional := map[string]any{
 			"statusCode": resp.StatusCode(),
 			"response":   string(resp.Body()),
 		}

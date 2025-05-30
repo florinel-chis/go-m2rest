@@ -5,7 +5,7 @@ type AttributeSet struct {
 	AttributeSetName    string      `json:"attribute_set_name"`
 	SortOrder           int         `json:"sort_order"`
 	EntityTypeID        int         `json:"entity_type_id,omitempty"`
-	ExtensionAttributes interface{} `json:"extension_attributes,omitempty"`
+	ExtensionAttributes any `json:"extension_attributes,omitempty"`
 }
 
 type Group struct {

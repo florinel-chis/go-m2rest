@@ -7,3 +7,5 @@ import (
 var ErrNoPointer = errors.New("target interface must be a pointer")
 
 var ErrNotFound = errors.New("no document found")
+
+var ErrBadRequest = errors.New("bad request")
