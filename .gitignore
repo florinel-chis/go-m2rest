@@ -7,6 +7,7 @@
 
 # Test binary, built with `go test -c`
 *.test
+!tests/*.go
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
@@ -113,6 +114,10 @@ test-results/
 # Generated files
 generated/
 gen/
+
+# Include important directories
+!tests/
+!scripts/
 
 # Profiling data
 *.prof

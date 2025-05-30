@@ -14,7 +14,7 @@ This directory contains scripts for bulk product operations in Magento 2.
 
 1. Set up your environment variables in `../.env`:
 ```bash
-MAGENTO_HOST=http://jti.local
+MAGENTO_HOST=http://magento.local
 MAGENTO_BEARER_TOKEN=your_bearer_token_here
 MAGENTO_STORE_CODE=all
 ```
