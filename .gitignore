@@ -94,6 +94,9 @@ test-results/
 *.local.yml
 *.local.json
 
+# Docker compose local overrides
+docker-compose.yml
+
 # Private keys and certificates
 *.pem
 *.key

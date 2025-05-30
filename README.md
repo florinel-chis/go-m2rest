@@ -116,6 +116,88 @@ MAGENTO_STORE_CODE=default
 TEST_DEBUG=true
 ```
 
+## Docker Support
+
+The library includes Docker support for easy testing and development without installing Go locally.
+
+### Quick Start with Docker
+
+```bash
+# One-line command to run all tests
+docker run --rm -e MAGENTO_BEARER_TOKEN=your_token_here -e MAGENTO_HOST=http://magento.local ghcr.io/florinel-chis/go-m2rest:latest
+
+# Or build and run locally
+docker build -t go-m2rest . && docker run --rm -e MAGENTO_BEARER_TOKEN=your_token go-m2rest
+```
+
+### Using Docker Compose
+
+```bash
+# Run all tests
+MAGENTO_BEARER_TOKEN=your_token docker-compose run --rm test
+
+# Run specific test
+MAGENTO_BEARER_TOKEN=your_token TEST_NAME=TestAdvancedProducts_VirtualProduct docker-compose run --rm test-specific
+
+# Development mode with live code reload
+docker-compose run --rm dev
+```
+
+### Using the Docker Helper Script
+
+For even easier usage, use the included `docker-run.sh` script:
+
+```bash
+# Run all tests
+MAGENTO_BEARER_TOKEN=your_token ./docker-run.sh test
+
+# Run specific test
+MAGENTO_BEARER_TOKEN=your_token TEST_NAME=TestAdvancedProducts_VirtualProduct ./docker-run.sh test-specific
+
+# Quick connectivity test
+MAGENTO_BEARER_TOKEN=your_token ./docker-run.sh test-quick
+
+# Create 50 products
+MAGENTO_BEARER_TOKEN=your_token ./docker-run.sh bulk-create 50
+
+# Update stock from CSV
+MAGENTO_BEARER_TOKEN=your_token ./docker-run.sh bulk-update stock_updates.csv
+
+# Open shell in container
+./docker-run.sh shell
+
+# Build Docker images
+./docker-run.sh build
+```
+
+### Docker Environment Variables
+
+The Docker setup supports all the same environment variables as the native setup:
+
+- `MAGENTO_HOST` - Magento URL (default: `http://magento.local`)
+- `MAGENTO_BEARER_TOKEN` - Integration token (required)
+- `MAGENTO_STORE_CODE` - Store code (default: `all`)
+- `TEST_DEBUG` - Enable debug logging (default: `true`)
+- `TEST_NAME` - Specific test to run (for test-specific command)
+
+### Building Custom Docker Image
+
+You can customize the Dockerfile to include your own environment variables:
+
+```dockerfile
+# In Dockerfile, update the ENV section
+ENV MAGENTO_HOST=http://your-magento.com \
+    MAGENTO_BEARER_TOKEN=your_permanent_token \
+    MAGENTO_STORE_CODE=your_store
+```
+
+Then build and run:
+
+```bash
+docker build -t my-m2rest .
+docker run --rm my-m2rest
+```
+
 ## Bulk Operations
 
 The library includes utilities for bulk operations. See the `scripts/` directory for examples.

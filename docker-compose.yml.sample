@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  # Run tests
+  test:
+    build: .
+    environment:
+      - MAGENTO_HOST=${MAGENTO_HOST:-http://magento.local}
+      - MAGENTO_BEARER_TOKEN=${MAGENTO_BEARER_TOKEN}
+      - MAGENTO_STORE_CODE=${MAGENTO_STORE_CODE:-all}
+      - TEST_DEBUG=${TEST_DEBUG:-true}
+    volumes:
+      - ./.env:/app/.env:ro
+    extra_hosts:
+      - "magento.local:host-gateway"
+    command: ["./test-runner", "-test.v"]
+
+  # Run specific test
+  test-specific:
+    build: .
+    environment:
+      - MAGENTO_HOST=${MAGENTO_HOST:-http://magento.local}
+      - MAGENTO_BEARER_TOKEN=${MAGENTO_BEARER_TOKEN}
+      - MAGENTO_STORE_CODE=${MAGENTO_STORE_CODE:-all}
+      - TEST_DEBUG=${TEST_DEBUG:-true}
+    volumes:
+      - ./.env:/app/.env:ro
+    extra_hosts:
+      - "magento.local:host-gateway"
+    command: ["./test-runner", "-test.v", "-test.run", "${TEST_NAME:-TestFunctionalV2_APIConnection}"]
+
+  # Development environment
+  dev:
+    build: 
+      context: .
+      target: builder
+    environment:
+      - MAGENTO_HOST=${MAGENTO_HOST:-http://magento.local}
+      - MAGENTO_BEARER_TOKEN=${MAGENTO_BEARER_TOKEN}
+      - MAGENTO_STORE_CODE=${MAGENTO_STORE_CODE:-all}
+    volumes:
+      - .:/app
+      - go-modules:/go/pkg/mod
+    working_dir: /app
+    extra_hosts:
+      - "magento.local:host-gateway"
+    command: ["go", "test", "-v", "./tests"]
+
+  # Run bulk update script
+  bulk-update:
+    build:
+      context: .
+      dockerfile: Dockerfile.scripts
+    environment:
+      - MAGENTO_HOST=${MAGENTO_HOST:-http://magento.local}
+      - MAGENTO_BEARER_TOKEN=${MAGENTO_BEARER_TOKEN}
+      - MAGENTO_STORE_CODE=${MAGENTO_STORE_CODE:-all}
+    volumes:
+      - ./scripts:/app/scripts
+    working_dir: /app/scripts
+    extra_hosts:
+      - "magento.local:host-gateway"
+
+volumes:
+  go-modules:

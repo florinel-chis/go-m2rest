@@ -1,0 +1,46 @@
+# Build stage for scripts
+FROM golang:1.22-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache git bash
+
+# Set working directory
+WORKDIR /app
+
+# Copy go mod files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build the bulk update script
+WORKDIR /app/scripts
+RUN go build -o bulk_product_update bulk_product_update.go
+
+# Runtime stage
+FROM alpine:latest
+
+# Install runtime dependencies
+RUN apk add --no-cache ca-certificates bash
+
+# Set working directory
+WORKDIR /app/scripts
+
+# Copy the binary and scripts from builder
+COPY --from=builder /app/scripts/bulk_product_update .
+COPY --from=builder /app/scripts/*.sh .
+COPY --from=builder /app/scripts/*.csv .
+
+# Make scripts executable
+RUN chmod +x *.sh
+
+# Set environment variables
+ENV MAGENTO_HOST=http://magento.local \
+    MAGENTO_BEARER_TOKEN=your_token_here \
+    MAGENTO_STORE_CODE=all
+
+# Default command
+CMD ["./run_bulk_update.sh", "stock_updates.csv", "100", "5", "both"]
