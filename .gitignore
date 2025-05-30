@@ -72,9 +72,10 @@ docs/_build/
 docs/_site/
 doc/swagger.schema
 
-# Project documentation (except README)
+# Project documentation (except README and EXAMPLES)
 *.md
 !README.md
+!EXAMPLES.md
 !scripts/README.md
 
 # Temporary files
