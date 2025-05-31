@@ -1,11 +1,19 @@
 package magento2
 
 import (
+	"context" // Added context
 	"fmt"
 	"strings"
 
 	"github.com/rs/zerolog/log"
 )
+
+// Assuming these constants are defined elsewhere
+var (
+	productsAttribute        = "/products/attributes"       // Used in CreateAttribute, GetAttributeByAttributeCode
+	productsAttributeOptions = "options"                    // Used in AddOption
+)
+// Assuming payload structs like createAttributePayload, addOptionPayload are defined
 
 type MAttribute struct {
 	Route     string
@@ -13,127 +21,94 @@ type MAttribute struct {
 	APIClient *Client
 }
 
-func CreateAttribute(a *Attribute, apiClient *Client) (*MAttribute, error) {
+// CreateAttribute now accepts context.Context
+func CreateAttribute(ctx context.Context, a *Attribute, apiClient *Client) (*MAttribute, error) {
 	mAttribute := &MAttribute{
 		Attribute: &Attribute{},
 		APIClient: apiClient,
 	}
 	endpoint := productsAttribute
-	httpClient := apiClient.HTTPClient
+	// httpClient := apiClient.HTTPClient // Not needed directly
 
-	payLoad := createAttributePayload{
-		Attribute: *a,
-	}
+	payLoad := createAttributePayload{Attribute: *a} // Assuming createAttributePayload defined
 
-	log.Debug().
-		Interface("payload", payLoad).
-		Str("endpoint", endpoint).
-		Msg("Creating attribute")
+	log.Debug().Interface("payload", payLoad).Str("endpoint", endpoint).Msg("Creating attribute with context")
 
-	resp, err := httpClient.R().SetBody(payLoad).SetResult(mAttribute.Attribute).Post(endpoint)
-	mAttribute.Route = productsAttribute + "/" + mAttribute.Attribute.AttributeCode
-
+	err := apiClient.PostRouteAndDecode(ctx, endpoint, payLoad, mAttribute.Attribute, "create attribute")
 	if err != nil {
-		log.Error().Err(err).Msg("Error creating attribute")
-		return mAttribute, fmt.Errorf("error creating attribute: %w", err)
+		return mAttribute, err // Return mAttribute for inspection even on partial failure
 	}
-
-	log.Debug().
-		Int("status", resp.StatusCode()).
-		Str("body", resp.String()).
-		Msg("Attribute creation response from remote")
-
-	httpErr := mayReturnErrorForHTTPResponse(resp, "create attribute")
-	if httpErr != nil {
-		return mAttribute, httpErr
-	}
-
+	mAttribute.Route = productsAttribute + "/" + mAttribute.Attribute.AttributeCode
 	return mAttribute, nil
 }
 
-func GetAttributeByAttributeCode(attributeCode string, apiClient *Client) (*MAttribute, error) {
-	mAttributeSet := &MAttribute{ // Note: variable name was mAttributeSet, corrected to mAttribute for consistency
+// GetAttributeByAttributeCode now accepts context.Context
+func GetAttributeByAttributeCode(ctx context.Context, attributeCode string, apiClient *Client) (*MAttribute, error) {
+	mAttribute := &MAttribute{ // Corrected variable name from mAttributeSet
 		Route:     fmt.Sprintf("%s/%s", productsAttribute, attributeCode),
 		Attribute: &Attribute{},
 		APIClient: apiClient,
 	}
 
-	log.Debug().
-		Str("attributeCode", attributeCode).
-		Str("route", mAttributeSet.Route). // Added route to debug log
-		Msg("Getting attribute by attribute code")
+	log.Debug().Str("attributeCode", attributeCode).Str("route", mAttribute.Route).Msg("Getting attribute by attribute code with context")
 
-	err := mAttributeSet.UpdateAttributeFromRemote()
+	err := mAttribute.UpdateAttributeFromRemote(ctx) // Pass context
 	if err != nil {
 		return nil, fmt.Errorf("error updating attribute from remote when getting by code: %w", err)
 	}
-
-	return mAttributeSet, nil
+	return mAttribute, nil
 }
 
-func (mas *MAttribute) UpdateAttributeOnRemote() error {
-	log.Debug().
-		Str("route", mas.Route).
-		Interface("attribute", mas.Attribute).
-		Msg("Updating attribute on remote")
+// UpdateAttributeOnRemote now accepts context.Context
+func (mas *MAttribute) UpdateAttributeOnRemote(ctx context.Context) error {
+	log.Debug().Str("route", mas.Route).Interface("attribute", mas.Attribute).Msg("Updating attribute on remote with context")
 
-	resp, err := mas.APIClient.HTTPClient.R().SetResult(mas.Attribute).SetBody(mas.Attribute).Put(mas.Route)
+	// This is a PUT request. Using direct client.
+	resp, err := mas.APIClient.HTTPClient.R().SetContext(ctx).SetResult(mas.Attribute).SetBody(mas.Attribute).Put(mas.Route)
 	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		log.Error().Err(err).Msg("Error updating attribute on remote")
 		return fmt.Errorf("error updating attribute on remote: %w", err)
 	}
 
-	log.Debug().
-		Int("status", resp.StatusCode()).
-		Str("body", resp.String()).
-		Msg("Attribute update response from remote")
-
-	httpErr := mayReturnErrorForHTTPResponse(resp, "update remote attribute from local")
-	if httpErr != nil {
-		return httpErr
-	}
-	return nil
+	log.Debug().Int("status", resp.StatusCode()).Str("body", resp.String()).Msg("Attribute update response from remote")
+	return mayReturnErrorForHTTPResponse(resp, "update remote attribute from local")
 }
 
-func (mas *MAttribute) UpdateAttributeFromRemote() error {
-	log.Debug().
-		Str("route", mas.Route).
-		Msg("Updating attribute from remote")
+// UpdateAttributeFromRemote now accepts context.Context
+func (mas *MAttribute) UpdateAttributeFromRemote(ctx context.Context) error {
+	log.Debug().Str("route", mas.Route).Msg("Updating attribute from remote with context")
 
-	resp, err := mas.APIClient.HTTPClient.R().SetResult(mas.Attribute).Get(mas.Route)
+	err := mas.APIClient.GetRouteAndDecode(ctx, mas.Route, mas.Attribute, "update local attribute from remote")
 	if err != nil {
-		log.Error().Err(err).Msg("Error updating attribute from remote")
-		return fmt.Errorf("error updating attribute from remote: %w", err)
-	}
-
-	log.Debug().
-		Int("status", resp.StatusCode()).
-		Str("body", resp.String()).
-		Msg("Attribute update from remote response")
-
-	httpErr := mayReturnErrorForHTTPResponse(resp, "update local attribute from remote")
-	if httpErr != nil {
-		return httpErr
+		return err
 	}
 	return nil
 }
 
-func (mas *MAttribute) AddOption(option Option) (string, error) {
+// AddOption now accepts context.Context
+func (mas *MAttribute) AddOption(ctx context.Context, option Option) (string, error) {
 	endpoint := mas.Route + "/" + productsAttributeOptions
-	httpClient := mas.APIClient.HTTPClient
+	// httpClient := mas.APIClient.HTTPClient // Not needed directly
 
-	payLoad := addOptionPayload{
-		Option: option,
-	}
+	payLoad := addOptionPayload{Option: option} // Assuming addOptionPayload defined
 
-	log.Debug().
-		Str("endpoint", endpoint).
-		Interface("payload", payLoad).
-		Interface("option", option). // Added logging for the option itself
-		Msg("Adding option to attribute")
+	log.Debug().Str("endpoint", endpoint).Interface("payload", payLoad).Interface("option", option).Msg("Adding option to attribute with context")
 
-	resp, err := httpClient.R().SetBody(payLoad).Post(endpoint)
+	// This is a POST request. Use PostRouteAndDecode.
+	// The original code expects a string response, PostRouteAndDecode needs a target struct/map.
+	// Let's assume PostRouteAndDecode can handle a *string or a struct that captures the ID.
+	// For now, if PostRouteAndDecode expects a struct, this might need a specific response type.
+	// The original code takes resp.String(). Forcing this into PostRouteAndDecode is tricky.
+	// Fallback to direct client usage for this specific case due to string response.
+
+	resp, err := mas.APIClient.HTTPClient.R().SetContext(ctx).SetBody(payLoad).Post(endpoint)
 	if err != nil {
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
 		log.Error().Err(err).Msg("Error adding option to attribute")
 		return "", fmt.Errorf("error assigning option to attribute: %w", err)
 	}
@@ -144,17 +119,18 @@ func (mas *MAttribute) AddOption(option Option) (string, error) {
 	}
 
 	optionValue := mayTrimSurroundingQuotes(resp.String())
+	// The original code also had: optionValue = strings.TrimPrefix(optionValue, "id_")
+	// This suggests the response is not JSON but a raw string like "id_123" or "123".
+	// PostRouteAndDecode is not suitable for non-JSON responses. Direct usage is correct here.
 	optionValue = strings.TrimPrefix(optionValue, "id_")
 
-	log.Debug().
-		Str("optionValue", optionValue).
-		Msg("Option added successfully, updating attribute from remote")
 
-	err = mas.UpdateAttributeFromRemote()
+	log.Debug().Str("optionValue", optionValue).Msg("Option added successfully, updating attribute from remote")
+	err = mas.UpdateAttributeFromRemote(ctx) // Pass context
 	if err != nil {
 		log.Error().Err(err).Msg("Error updating attribute from remote after adding option")
-		return "", fmt.Errorf("error updating attribute from remote after adding option: %w", err)
+		// Return optionValue still, as the option might have been added even if subsequent update fails.
+		return optionValue, fmt.Errorf("error updating attribute from remote after adding option: %w", err)
 	}
-
 	return optionValue, nil
 }

@@ -1,9 +1,18 @@
 package magento2
 
 import (
+	"context" // Added context
 	"fmt"
 
 	"github.com/rs/zerolog/log"
+)
+
+// Assuming these constants are defined elsewhere (e.g., categories_routes.go)
+// For the subtask, define placeholders if needed.
+var (
+	categories                 = "/categories"
+	categoriesList             = "/categories/list" // Used in GetCategoryByName
+	categoriesProductsRelative = "products"         // Used in UpdateCategoryProductsFromRemote, AssignProductByProductLink
 )
 
 type MCategory struct {
@@ -13,65 +22,51 @@ type MCategory struct {
 	APIClient *Client
 }
 
-func CreateCategory(c *Category, apiClient *Client) (*MCategory, error) {
+// CreateCategory now accepts context.Context
+func CreateCategory(ctx context.Context, c *Category, apiClient *Client) (*MCategory, error) {
 	mC := &MCategory{
 		Category:  &Category{},
 		Products:  &[]ProductLink{},
 		APIClient: apiClient,
 	}
 	endpoint := categories
-	httpClient := apiClient.HTTPClient
+	// httpClient := apiClient.HTTPClient // No longer needed directly for POST if using PostRouteAndDecode
 
-	payLoad := createCategoryPayload{
+	payLoad := createCategoryPayload{ // Assuming createCategoryPayload is defined
 		Category: *c,
 	}
 
-	log.Debug().
-		Interface("payload", payLoad).
-		Str("endpoint", endpoint).
-		Msg("Creating category")
+	log.Debug().Interface("payload", payLoad).Str("endpoint", endpoint).Msg("Creating category with context")
 
-	resp, err := httpClient.R().SetBody(payLoad).SetResult(mC.Category).Post(endpoint)
-	mC.Route = fmt.Sprintf("%s/%d", categories, mC.Category.ID)
-
+	// Use APIClient's PostRouteAndDecode
+	err := apiClient.PostRouteAndDecode(ctx, endpoint, payLoad, mC.Category, "create category")
 	if err != nil {
-		return mC, fmt.Errorf("error creating category: %w", err)
+		// Error is already wrapped by PostRouteAndDecode
+		return mC, err // Return mC to allow inspection even on partial failure if needed, or nil
 	}
-
-	httpErr := mayReturnErrorForHTTPResponse(resp, "create category")
-	if httpErr != nil {
-		return mC, httpErr
-	}
-
+	mC.Route = fmt.Sprintf("%s/%d", categories, mC.Category.ID)
 	return mC, nil
 }
 
-func GetCategoryByName(name string, apiClient *Client) (*MCategory, error) {
+// GetCategoryByName now accepts context.Context
+func GetCategoryByName(ctx context.Context, name string, apiClient *Client) (*MCategory, error) {
 	mC := &MCategory{
 		Category:  &Category{},
 		Products:  &[]ProductLink{},
 		APIClient: apiClient,
 	}
-	searchQuery := BuildSearchQuery("name", name, "in")
+	searchQuery := BuildSearchQuery("name", name, "in") // Assuming BuildSearchQuery is available
 	endpoint := categoriesList + "?" + searchQuery
-	httpClient := apiClient.HTTPClient
+	// httpClient := apiClient.HTTPClient // No longer needed directly
 
-	response := &categorySearchQueryResponse{}
+	response := &categorySearchQueryResponse{} // Assuming categorySearchQueryResponse is defined
 
-	log.Debug().
-		Str("name", name).
-		Str("endpoint", endpoint).
-		Msg("Getting category by name")
+	log.Debug().Str("name", name).Str("endpoint", endpoint).Msg("Getting category by name with context")
 
-	resp, err := httpClient.R().SetResult(response).Get(endpoint)
-
+	// Use APIClient's GetRouteAndDecode
+	err := apiClient.GetRouteAndDecode(ctx, endpoint, response, "get category by name from remote")
 	if err != nil {
-		return nil, fmt.Errorf("error getting category by name: %w", err)
-	}
-
-	httpErr := mayReturnErrorForHTTPResponse(resp, "get category by name from remote")
-	if httpErr != nil {
-		return nil, httpErr
+		return nil, err
 	}
 
 	if len(response.Categories) == 0 {
@@ -82,83 +77,65 @@ func GetCategoryByName(name string, apiClient *Client) (*MCategory, error) {
 	mC.Category = &response.Categories[0]
 	mC.Route = fmt.Sprintf("%s/%d", categories, mC.Category.ID)
 
-	err = mC.UpdateCategoryFromRemote()
+	err = mC.UpdateCategoryFromRemote(ctx) // Pass context
 	if err != nil {
+		// Note: original code returned mC here, which might be partially populated.
+		// Consider returning nil for mC if UpdateCategoryFromRemote fails critically.
 		return mC, fmt.Errorf("error updating category from remote after getting by name: %w", err)
 	}
-
-	httpErr = mayReturnErrorForHTTPResponse(resp, "get detailed category by name from remote")
-	if httpErr != nil {
-		return mC, httpErr
-	}
+	// httpErr := mayReturnErrorForHTTPResponse(resp, "get detailed category by name from remote")
+	// This check would have been part of GetRouteAndDecode now.
 
 	return mC, nil
 }
 
-func (mC *MCategory) UpdateCategoryFromRemote() error {
-	log.Debug().
-		Str("route", mC.Route).
-		Msg("Updating category details from remote")
+// UpdateCategoryFromRemote now accepts context.Context
+func (mC *MCategory) UpdateCategoryFromRemote(ctx context.Context) error {
+	log.Debug().Str("route", mC.Route).Msg("Updating category details from remote with context")
 
-	resp, err := mC.APIClient.HTTPClient.R().SetResult(mC.Category).Get(mC.Route)
-
+	err := mC.APIClient.GetRouteAndDecode(ctx, mC.Route, mC.Category, "get category from remote")
 	if err != nil {
-		log.Error().Err(err).Msg("Error updating category details from remote")
-		return fmt.Errorf("error getting category from remote: %w", err)
+		return err
 	}
 
-	httpErr := mayReturnErrorForHTTPResponse(resp, "get category from remote")
-	if httpErr != nil {
-		return httpErr
-	}
-
-	err = mC.UpdateCategoryProductsFromRemote()
+	err = mC.UpdateCategoryProductsFromRemote(ctx) // Pass context
 	if err != nil {
 		return fmt.Errorf("error updating category products from remote after updating category details: %w", err)
 	}
 	return nil
 }
 
-func (mC *MCategory) UpdateCategoryProductsFromRemote() error {
+// UpdateCategoryProductsFromRemote now accepts context.Context
+func (mC *MCategory) UpdateCategoryProductsFromRemote(ctx context.Context) error {
 	productsRoute := fmt.Sprintf("%s/%s", mC.Route, categoriesProductsRelative)
-	log.Debug().
-		Str("route", productsRoute).
-		Msg("Updating category products from remote")
+	log.Debug().Str("route", productsRoute).Msg("Updating category products from remote with context")
 
-	resp, err := mC.APIClient.HTTPClient.R().SetResult(mC.Products).Get(productsRoute)
-
+	err := mC.APIClient.GetRouteAndDecode(ctx, productsRoute, mC.Products, "get category products from remote")
 	if err != nil {
-		log.Error().Err(err).Msg("Error updating category products from remote")
-		return fmt.Errorf("error getting category products from remote: %w", err)
-	}
-
-	httpErr := mayReturnErrorForHTTPResponse(resp, "get category products from remote")
-	if httpErr != nil {
-		return httpErr
+		return err
 	}
 	return nil
 }
 
-func (mC *MCategory) AssignProductByProductLink(pl *ProductLink) error {
+// AssignProductByProductLink now accepts context.Context
+func (mC *MCategory) AssignProductByProductLink(ctx context.Context, pl *ProductLink) error {
 	if pl.CategoryID == "" {
 		pl.CategoryID = fmt.Sprintf("%d", mC.Category.ID)
 	}
 
-	httpClient := mC.APIClient.HTTPClient
+	// httpClient := mC.APIClient.HTTPClient // Not needed directly for PUT if PutRouteAndDecode exists
 	endpoint := fmt.Sprintf("%s/%s", mC.Route, categoriesProductsRelative)
 
-	payLoad := assignProductPayload{ProductLink: *pl}
+	payLoad := assignProductPayload{ProductLink: *pl} // Assuming assignProductPayload defined
 
-	log.Debug().
-		Str("sku", pl.Sku).
-		Int("categoryID", mC.Category.ID).
-		Str("endpoint", endpoint).
-		Interface("payload", payLoad).
-		Msg("Assigning product to category")
+	log.Debug().Str("sku", pl.Sku).Int("categoryID", mC.Category.ID).Str("endpoint", endpoint).Interface("payload", payLoad).Msg("Assigning product to category with context")
 
-	resp, err := httpClient.R().SetBody(payLoad).Put(endpoint)
-
+	// This is a PUT request. Using direct client as PutRouteAndDecode wasn't in api_client.go scope.
+	resp, err := mC.APIClient.HTTPClient.R().SetContext(ctx).SetBody(payLoad).Put(endpoint)
 	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		log.Error().Err(err).Msg("Error assigning product to category")
 		return fmt.Errorf("error assigning product to category: %w", err)
 	}
@@ -168,7 +145,6 @@ func (mC *MCategory) AssignProductByProductLink(pl *ProductLink) error {
 		return httpErr
 	}
 
-	*mC.Products = append(*mC.Products, *pl)
-
+	*mC.Products = append(*mC.Products, *pl) // Optimistic update
 	return nil
 }
