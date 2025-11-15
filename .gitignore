@@ -66,6 +66,7 @@ debug.test
 # Binary output
 bin/
 build/
+scripts/scripts
 
 # Documentation build
 docs/_build/
