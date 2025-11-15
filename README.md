@@ -8,7 +8,7 @@ This Golang library provides a comprehensive interface for interacting with the 
 
 ## Features
 
-* **Modern Go Practices:** Uses Go 1.21+ features including the `any` type, structured errors with wrapping, and context support (coming soon)
+* **Modern Go Practices:** Uses Go 1.25+ features including the `any` type, structured errors with wrapping, and context support
 * **Comprehensive Logging:** Structured logging with zerolog for better debugging and monitoring
 * **Robust Error Handling:** Custom error types for common Magento 2 API scenarios
 * **Authentication Support:** Multiple authentication methods including Integration tokens, Customer tokens, and Admin credentials
@@ -28,7 +28,7 @@ This Golang library provides a comprehensive interface for interacting with the 
 
 ### Prerequisites
 
-1. **Go 1.21+** - Required for modern Go features
+1. **Go 1.25+** - Required for modern Go features and latest security patches
 2. **Magento 2 Instance** - With REST API enabled
 3. **API Credentials** - Integration token or admin/customer credentials
 
@@ -386,6 +386,15 @@ For issues, feature requests, or questions:
 ## Changelog
 
 ### Recent Updates
+- **2025-01-15:** Updated to Go 1.25+ with latest dependency versions
+  - Go toolchain: 1.25.1
+  - Updated all dependencies to latest stable versions
+  - golang.org/x/net: v0.47.0
+  - golang.org/x/sys: v0.38.0
+  - mattn/go-colorable: v0.1.14
+  - mattn/go-isatty: v0.0.20
+  - Verified no breaking changes
+  - All code compiles and passes quality checks
 - Added support for Go 1.21+ features
 - Migrated to resty v2 for better performance
 - Added structured logging with zerolog
