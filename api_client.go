@@ -30,8 +30,12 @@ const (
 	DefaultRetryCount = 4
 	// DefaultRetryWaitTime is the base wait time between retries.
 	DefaultRetryWaitTime = 500 * time.Millisecond
-	// DefaultRetryMaxWaitTime caps the wait time between retries.
-	DefaultRetryMaxWaitTime = 20 * time.Second
+	// DefaultRetryMaxWaitTime caps the wait time between retries. It is
+	// deliberately generous because resty clamps a server-provided
+	// Retry-After value to this maximum; the computed jittered backoff
+	// stays far below it with the default policy (500ms base, 4 retries
+	// gives at most ~4s).
+	DefaultRetryMaxWaitTime = 2 * time.Minute
 )
 
 // retryStatusCodes are the HTTP status codes that trigger a retry.
@@ -43,9 +47,22 @@ var retryStatusCodes = map[int]bool{
 	http.StatusGatewayTimeout:      true, // 504
 }
 
+// retryableMethods are the HTTP methods that are retried automatically.
+// POST and PUT are deliberately excluded: Magento uses them for
+// non-idempotent writes (order placement via PUT /carts/{id}/order, entity
+// creation via POST), and a 429/502/504 from a proxy can arrive after the
+// backend has already committed the write, so an automatic retry could
+// duplicate orders or created entities.
+var retryableMethods = map[string]bool{
+	http.MethodGet:     true,
+	http.MethodHead:    true,
+	http.MethodOptions: true,
+	http.MethodDelete:  true,
+}
+
 // SetLogger is deprecated. Use SetZeroLogger from logger.go instead
 func SetLogger(l any) {
-	logger.Warn().Msg("SetLogger is deprecated. Use SetZeroLogger instead")
+	logger().Warn().Msg("SetLogger is deprecated. Use SetZeroLogger instead")
 }
 
 type Client struct {
@@ -81,7 +98,11 @@ func (c *Client) SetTimeout(d time.Duration) {
 // SetRetryPolicy configures how many times a failed request is retried
 // (count is the number of retries after the initial attempt) and the
 // base/maximum wait times between attempts. The Retry-After response header,
-// when present, still takes precedence over the computed backoff.
+// when present, still takes precedence over the computed backoff, but both
+// are capped at maxWait (so keep maxWait large enough to honor the
+// Retry-After values your rate limiter emits; the default is
+// DefaultRetryMaxWaitTime). Only idempotent requests (GET, HEAD, OPTIONS,
+// DELETE) are retried; see retryableMethods.
 func (c *Client) SetRetryPolicy(count int, wait, maxWait time.Duration) {
 	c.HTTPClient.
 		SetRetryCount(count).
@@ -96,17 +117,17 @@ func (c *Client) GetRouteAndDecodeCtx(ctx context.Context, route string, target 
 		return fmt.Errorf("%w", ErrNoPointer)
 	}
 
-	logger.Debug().Str("route", route).Msg("GET request")
+	logger().Debug().Str("route", route).Msg("GET request")
 	req := c.HTTPClient.R()
 	if ctx != nil {
 		req.SetContext(ctx)
 	}
 	resp, err := req.SetResult(target).Get(route)
 	if err != nil {
-		logger.Error().Err(err).Str("route", route).Msg("GET request failed")
+		logger().Error().Err(err).Str("route", route).Msg("GET request failed")
 		return err
 	}
-	logger.Debug().Str("route", route).Int("status", resp.StatusCode()).Msg("GET request completed")
+	logger().Debug().Str("route", route).Int("status", resp.StatusCode()).Msg("GET request completed")
 	return mayReturnErrorForHTTPResponse(resp, tryTo)
 }
 
@@ -117,17 +138,17 @@ func (c *Client) PostRouteAndDecodeCtx(ctx context.Context, route string, body, 
 		return fmt.Errorf("%w", ErrNoPointer)
 	}
 
-	logger.Debug().Str("route", route).Interface("body", body).Msg("POST request")
+	logger().Debug().Str("route", route).Interface("body", body).Msg("POST request")
 	req := c.HTTPClient.R()
 	if ctx != nil {
 		req.SetContext(ctx)
 	}
 	resp, err := req.SetResult(target).SetBody(body).Post(route)
 	if err != nil {
-		logger.Error().Err(err).Str("route", route).Msg("POST request failed")
+		logger().Error().Err(err).Str("route", route).Msg("POST request failed")
 		return err
 	}
-	logger.Debug().Str("route", route).Int("status", resp.StatusCode()).Msg("POST request completed")
+	logger().Debug().Str("route", route).Int("status", resp.StatusCode()).Msg("POST request completed")
 	return mayReturnErrorForHTTPResponse(resp, tryTo)
 }
 
@@ -141,7 +162,7 @@ func (c *Client) PostRouteAndDecode(route string, body, target any, tryTo string
 
 func NewAPIClientWithoutAuthentication(storeConfig *StoreConfig) *Client {
 	httpClient := buildBasicHTTPClient(storeConfig)
-	logger.Info().Interface("storeConfig", storeConfig).Msg("Created API client without authentication")
+	logger().Info().Interface("storeConfig", storeConfig).Msg("Created API client without authentication")
 
 	return &Client{
 		HTTPClient: httpClient,
@@ -151,7 +172,7 @@ func NewAPIClientWithoutAuthentication(storeConfig *StoreConfig) *Client {
 func NewAPIClientFromAuthentication(storeConfig *StoreConfig, payload AuthenticationRequestPayload, authenticationType AuthenticationType) (*Client, error) {
 	client := buildBasicHTTPClient(storeConfig)
 
-	logger.Info().Interface("storeConfig", storeConfig).Str("authenticationType", authenticationType.Route()).Msg("Authenticating API client")
+	logger().Info().Interface("storeConfig", storeConfig).Str("authenticationType", authenticationType.Route()).Msg("Authenticating API client")
 	resp, err := client.R().SetBody(payload).Post(authenticationType.Route())
 	if err != nil {
 		return nil, err
@@ -159,7 +180,7 @@ func NewAPIClientFromAuthentication(storeConfig *StoreConfig, payload Authentica
 
 	token := mayTrimSurroundingQuotes(resp.String())
 	client.SetAuthToken(token)
-	logger.Info().Str("authenticationType", authenticationType.Route()).Msg("API client authenticated successfully")
+	logger().Info().Str("authenticationType", authenticationType.Route()).Msg("API client authenticated successfully")
 
 	return &Client{
 		HTTPClient: client,
@@ -170,7 +191,7 @@ func NewAPIClientFromIntegration(storeConfig *StoreConfig, bearer string) (*Clie
 	client := buildBasicHTTPClient(storeConfig)
 
 	client.SetAuthToken(bearer)
-	logger.Info().Interface("storeConfig", storeConfig).Msg("Created API client from integration")
+	logger().Info().Interface("storeConfig", storeConfig).Msg("Created API client from integration")
 
 	return &Client{
 		HTTPClient: client,
@@ -192,19 +213,36 @@ func buildBasicHTTPClient(storeConfig *StoreConfig) *resty.Client {
 		SetRetryMaxWaitTime(DefaultRetryMaxWaitTime).
 		AddRetryCondition(
 			func(r *resty.Response, err error) bool {
-				return r != nil && retryStatusCodes[r.StatusCode()]
+				if r == nil || r.Request == nil || !retryableMethods[r.Request.Method] {
+					return false
+				}
+				if err != nil {
+					// Transport-level failure (per-attempt timeout,
+					// connection reset, TLS error, ...): retry. resty
+					// checks the request context before every retry and
+					// during the backoff sleep, so a canceled/expired
+					// caller context still aborts promptly.
+					return true
+				}
+				return retryStatusCodes[r.StatusCode()]
 			},
 		).
 		SetRetryAfter(func(cl *resty.Client, resp *resty.Response) (time.Duration, error) {
 			if resp != nil {
 				if retryAfter := strings.TrimSpace(resp.Header().Get("Retry-After")); retryAfter != "" {
+					// RFC 9110 allows both delta-seconds and an HTTP-date.
 					if seconds, convErr := strconv.Atoi(retryAfter); convErr == nil && seconds > 0 {
 						return time.Duration(seconds) * time.Second, nil
+					}
+					if at, convErr := http.ParseTime(retryAfter); convErr == nil {
+						if wait := time.Until(at); wait > 0 {
+							return wait, nil
+						}
 					}
 				}
 			}
 			return 0, nil // fall back to the default backoff algorithm
 		})
-	logger.Debug().Str("route", fullRestRoute).Msg("Built basic HTTP client")
+	logger().Debug().Str("route", fullRestRoute).Msg("Built basic HTTP client")
 	return client
 }

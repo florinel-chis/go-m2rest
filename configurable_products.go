@@ -23,7 +23,7 @@ func SetOptionForExistingConfigurableProduct(sku string, o *ConfigurableProductO
 		Option: *o,
 	}
 
-	logger.Debug().
+	logger().Debug().
 		Str("sku", sku).
 		Str("endpoint", endpoint).
 		Interface("payload", payLoad).
@@ -52,14 +52,14 @@ func (mConfigurableProduct *MConfigurableProduct) UpdateOptionsFromRemote() erro
 	httpClient := mConfigurableProduct.APIClient.HTTPClient
 	optionsRoute := mConfigurableProduct.Route + "/" + configurableProductsOptionsAllRelative
 
-	logger.Debug().
+	logger().Debug().
 		Str("route", optionsRoute).
 		Msg("Updating options for configurable product from remote")
 
 	resp, err := httpClient.R().SetResult(mConfigurableProduct.Options).Get(optionsRoute)
 
 	if err != nil {
-		logger.Error().Err(err).Msg("Error updating options for configurable product from remote")
+		logger().Error().Err(err).Msg("Error updating options for configurable product from remote")
 		return fmt.Errorf("error getting options for configurable product from remote: %w", err)
 	}
 
@@ -78,7 +78,7 @@ func (mConfigurableProduct *MConfigurableProduct) AddChildBySKU(sku string) erro
 
 	endpoint := fmt.Sprintf("%s/%s", mConfigurableProduct.Route, configurableProductsChildRelative)
 
-	logger.Debug().
+	logger().Debug().
 		Str("sku", sku).
 		Str("endpoint", endpoint).
 		Interface("payload", payLoad).
@@ -104,7 +104,7 @@ func GetConfigurableProductBySKU(sku string, apiClient *Client) (*MConfigurableP
 		APIClient: apiClient,
 	}
 
-	logger.Debug().Str("sku", sku).Msg("Getting configurable product by SKU")
+	logger().Debug().Str("sku", sku).Msg("Getting configurable product by SKU")
 
 	err := mConfigurableProduct.UpdateOptionsFromRemote()
 	if err != nil {
@@ -121,7 +121,7 @@ func (mConfigurableProduct *MConfigurableProduct) UpdateOptionByID(o *Configurab
 		Option: *o,
 	}
 
-	logger.Debug().
+	logger().Debug().
 		Int("optionID", o.ID).
 		Str("endpoint", endpoint).
 		Interface("payload", payLoad).

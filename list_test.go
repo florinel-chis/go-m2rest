@@ -95,7 +95,10 @@ func TestListOptionsEncode(t *testing.T) {
 func TestIterateProductsTotalCountTermination(t *testing.T) {
 	var requests int32
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&requests, 1)
+		if atomic.AddInt32(&requests, 1) > 6 {
+			http.Error(w, "pagination failed to terminate", http.StatusBadRequest)
+			return
+		}
 		query := r.URL.Query()
 
 		// The updated_at filter must be present on every page request.
@@ -150,7 +153,12 @@ func TestIterateProductsTotalCountTermination(t *testing.T) {
 func TestIterateProductsEmptyPageTermination(t *testing.T) {
 	var requests int32
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&requests, 1)
+		if atomic.AddInt32(&requests, 1) > 6 {
+			// Circuit breaker: fail fast (non-retryable status) instead of
+			// hanging for the harness timeout if termination regresses.
+			http.Error(w, "pagination failed to terminate", http.StatusBadRequest)
+			return
+		}
 		page, _ := strconv.Atoi(r.URL.Query().Get("searchCriteria[currentPage]"))
 		w.Header().Set("Content-Type", "application/json")
 		if page == 1 {
@@ -175,6 +183,52 @@ func TestIterateProductsEmptyPageTermination(t *testing.T) {
 	}
 	if got := atomic.LoadInt32(&requests); got != 2 {
 		t.Errorf("requests = %d, want 2 (empty page terminates, no infinite loop)", got)
+	}
+}
+
+// Real Magento clamps an out-of-range currentPage to the last page and
+// re-serves the last page's items (it never returns an empty page past the
+// end). When total_count overstates the reachable items, the repeated page
+// must be detected and not delivered twice.
+func TestIterateProductsClampedLastPageNotDuplicated(t *testing.T) {
+	var requests int32
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&requests, 1) > 6 {
+			http.Error(w, "pagination failed to terminate", http.StatusBadRequest)
+			return
+		}
+		page, _ := strconv.Atoi(r.URL.Query().Get("searchCriteria[currentPage]"))
+		w.Header().Set("Content-Type", "application/json")
+		switch page {
+		case 1:
+			// total_count claims 6 but only 4 items are reachable.
+			_, _ = w.Write([]byte(`{"items":[{"sku":"p1"},{"sku":"p2"}],"total_count":6}`))
+		default:
+			// Pages 2, 3, ... all serve the (clamped) last page.
+			_, _ = w.Write([]byte(`{"items":[{"sku":"p3"},{"sku":"p4"}],"total_count":6}`))
+		}
+	})
+
+	client := newTestClient(t, handler)
+	var skus []string
+	err := IterateProducts(context.Background(), client, ListOptions{PageSize: 2}, func(p Product) error {
+		skus = append(skus, p.Sku)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("IterateProducts returned error: %v", err)
+	}
+	want := []string{"p1", "p2", "p3", "p4"}
+	if len(skus) != len(want) {
+		t.Fatalf("collected skus = %v, want %v (no duplicates from the clamped last page)", skus, want)
+	}
+	for i := range want {
+		if skus[i] != want[i] {
+			t.Errorf("skus[%d] = %q, want %q", i, skus[i], want[i])
+		}
+	}
+	if got := atomic.LoadInt32(&requests); got != 3 {
+		t.Errorf("requests = %d, want 3 (repeated page detected on the third request)", got)
 	}
 }
 
@@ -247,16 +301,16 @@ func TestGetAttributesPageAndIterateAttributes(t *testing.T) {
 	if color.AttributeCode != "color" || color.AttributeID != 93 {
 		t.Errorf("unexpected first attribute: %+v", color)
 	}
-	if !bool(color.IsFilterable) {
+	if !color.IsFilterable.Bool() {
 		t.Error("is_filterable: 2 should decode to true")
 	}
-	if !bool(color.IsFilterableInSearch) {
+	if !color.IsFilterableInSearch.Bool() {
 		t.Error(`is_filterable_in_search: "1" should decode to true`)
 	}
 	if color.IsSearchable != "1" {
 		t.Errorf("is_searchable should stay a string, got %q", color.IsSearchable)
 	}
-	if bool(page.Items[1].IsFilterable) || bool(page.Items[1].IsFilterableInSearch) {
+	if page.Items[1].IsFilterable.Bool() || page.Items[1].IsFilterableInSearch.Bool() {
 		t.Errorf("unexpected filterable flags on second attribute: %+v", page.Items[1])
 	}
 
@@ -276,7 +330,10 @@ func TestGetAttributesPageAndIterateAttributes(t *testing.T) {
 func TestGetAttributeSetsListPaginatesInternally(t *testing.T) {
 	var requests int32
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&requests, 1)
+		if atomic.AddInt32(&requests, 1) > 6 {
+			http.Error(w, "pagination failed to terminate", http.StatusBadRequest)
+			return
+		}
 		if r.URL.Path != "/rest/default/V1/products/attribute-sets/sets/list" {
 			t.Errorf("unexpected path %q", r.URL.Path)
 		}

@@ -80,9 +80,30 @@ func TestDefaultTimeoutAndSetTimeout(t *testing.T) {
 	if got := client.HTTPClient.GetClient().Timeout; got != DefaultTimeout {
 		t.Errorf("default timeout = %v, want %v", got, DefaultTimeout)
 	}
-	client.SetTimeout(5 * time.Second)
-	if got := client.HTTPClient.GetClient().Timeout; got != 5*time.Second {
-		t.Errorf("timeout after SetTimeout = %v, want 5s", got)
+	// SetTimeout must actually bound request duration: against a server
+	// slower than the configured timeout the request fails promptly instead
+	// of blocking (retries disabled — a timed-out attempt is a transport
+	// error and would otherwise be retried).
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-time.After(5 * time.Second):
+		}
+	})
+	slow := newTestClient(t, handler)
+	slow.SetRetryPolicy(0, time.Millisecond, time.Millisecond)
+	slow.SetTimeout(100 * time.Millisecond)
+
+	start := time.Now()
+	var target map[string]any
+	err := slow.GetRouteAndDecodeCtx(context.Background(), "products", &target, "timeout test")
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected timeout error from slow server, got nil")
+	}
+	if elapsed > 2*time.Second {
+		t.Errorf("request against slow server took %v, want ~100ms (SetTimeout not applied)", elapsed)
 	}
 }
 
@@ -157,7 +178,9 @@ func TestRetriesExhaustedReturnsAPIError(t *testing.T) {
 
 func TestNotFoundErrorSentinelAndAPIError(t *testing.T) {
 	longBody := strings.Repeat("x", 1000)
+	var attempts int32
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&attempts, 1)
 		http.Error(w, longBody, http.StatusNotFound)
 	})
 
@@ -165,6 +188,9 @@ func TestNotFoundErrorSentinelAndAPIError(t *testing.T) {
 	_, err := GetProductsPage(context.Background(), client, ListOptions{})
 	if err == nil {
 		t.Fatal("expected error for 404, got nil")
+	}
+	if got := atomic.LoadInt32(&attempts); got != 1 {
+		t.Errorf("attempts = %d, want 1 (404 must not be retried)", got)
 	}
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("errors.Is(err, ErrNotFound) = false, want true")
@@ -182,6 +208,131 @@ func TestNotFoundErrorSentinelAndAPIError(t *testing.T) {
 	}
 	if apiErr.Endpoint == "" || !strings.Contains(apiErr.Endpoint, "/products") {
 		t.Errorf("APIError.Endpoint = %q, want it to reference the endpoint", apiErr.Endpoint)
+	}
+}
+
+// The Retry-After header may also be an HTTP-date (RFC 9110); it must be
+// honored just like the delta-seconds form.
+func TestRetryOn429HonorsRetryAfterHTTPDate(t *testing.T) {
+	var attempts int32
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&attempts, 1) == 1 {
+			w.Header().Set("Retry-After", time.Now().Add(2*time.Second).UTC().Format(http.TimeFormat))
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[{"sku":"p1","name":"P1"}],"total_count":1}`))
+	})
+
+	client := newTestClient(t, handler)
+	start := time.Now()
+	page, err := GetProductsPage(context.Background(), client, ListOptions{})
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("GetProductsPage returned error: %v", err)
+	}
+	if got := atomic.LoadInt32(&attempts); got != 2 {
+		t.Errorf("attempts = %d, want 2", got)
+	}
+	if len(page.Items) != 1 {
+		t.Errorf("unexpected page after retry: %+v", page)
+	}
+	// The date is ~2s in the future (HTTP-dates have second granularity, so
+	// the effective wait is 1-2s); the default first jittered backoff would
+	// be well under 500ms.
+	if elapsed < 900*time.Millisecond {
+		t.Errorf("retry happened after %v, expected at least ~1s (HTTP-date Retry-After honored)", elapsed)
+	}
+}
+
+// Non-idempotent methods must not be retried automatically: a 502 on order
+// placement may arrive after the backend committed the order.
+func TestPostNotRetriedOn5xx(t *testing.T) {
+	var attempts int32
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&attempts, 1)
+		http.Error(w, `{"message":"bad gateway"}`, http.StatusBadGateway)
+	})
+
+	client := newTestClient(t, handler)
+	var target map[string]any
+	err := client.PostRouteAndDecodeCtx(context.Background(), "orders", map[string]string{"k": "v"}, &target, "test post")
+	if err == nil {
+		t.Fatal("expected error for 502, got nil")
+	}
+	if got := atomic.LoadInt32(&attempts); got != 1 {
+		t.Errorf("attempts = %d, want 1 (POST must not be retried)", got)
+	}
+}
+
+// Transport-level failures (connection drop, per-attempt timeout) must be
+// retried for idempotent requests.
+func TestTransportErrorRetriedForGET(t *testing.T) {
+	var attempts int32
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&attempts, 1) == 1 {
+			// Drop the connection mid-request to force a transport error.
+			hj, ok := w.(http.Hijacker)
+			if !ok {
+				t.Fatal("test server does not support hijacking")
+			}
+			conn, _, err := hj.Hijack()
+			if err != nil {
+				t.Fatalf("hijack failed: %v", err)
+			}
+			_ = conn.Close()
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[{"sku":"p1","name":"P1"}],"total_count":1}`))
+	})
+
+	client := newTestClient(t, handler)
+	client.SetRetryPolicy(2, 5*time.Millisecond, 20*time.Millisecond)
+
+	page, err := GetProductsPage(context.Background(), client, ListOptions{})
+	if err != nil {
+		t.Fatalf("GetProductsPage returned error: %v", err)
+	}
+	if got := atomic.LoadInt32(&attempts); got != 2 {
+		t.Errorf("attempts = %d, want 2 (transport error retried once)", got)
+	}
+	if len(page.Items) != 1 || page.Items[0].Sku != "p1" {
+		t.Errorf("unexpected page after retry: %+v", page)
+	}
+}
+
+// Cancellation must also abort promptly while the client is sleeping
+// between retries (here: a 5s Retry-After against a 100ms deadline).
+func TestContextCancellationDuringRetryBackoff(t *testing.T) {
+	var attempts int32
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&attempts, 1)
+		w.Header().Set("Retry-After", "5")
+		w.WriteHeader(http.StatusTooManyRequests)
+	})
+
+	client := newTestClient(t, handler)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, err := GetProductsPage(ctx, client, ListOptions{})
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected error from canceled context, got nil")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("errors.Is(err, context.DeadlineExceeded) = false, got err: %v", err)
+	}
+	if elapsed > 2*time.Second {
+		t.Errorf("cancellation during backoff took %v, expected prompt abort", elapsed)
+	}
+	if got := atomic.LoadInt32(&attempts); got != 1 {
+		t.Errorf("attempts = %d, want 1 (no retry after context expiry)", got)
 	}
 }
 

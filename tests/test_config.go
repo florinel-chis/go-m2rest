@@ -2,6 +2,7 @@ package magento2
 
 import (
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"strconv"
@@ -159,14 +160,12 @@ func loadDotEnv() {
 	defer file.Close()
 
 	// Simple .env parser
-	buf := make([]byte, 1024)
-	n, err := file.Read(buf)
+	data, err := io.ReadAll(file)
 	if err != nil {
 		return
 	}
 
-	content := string(buf[:n])
-	lines := strings.Split(content, "\n")
+	lines := strings.Split(string(data), "\n")
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)

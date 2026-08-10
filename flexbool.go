@@ -7,21 +7,47 @@ import (
 	"strings"
 )
 
-// FlexBool is a bool that tolerates the mixed representations the Magento
-// API uses for boolean-ish fields: JSON true/false, numbers (0 is false,
-// anything else is true — is_filterable for example uses 0/1/2) and strings
-// such as "0", "1", "2", "true" and "false". It always marshals as a plain
-// JSON bool.
-type FlexBool bool
+// FlexBool is a boolean-ish value that tolerates the mixed representations
+// the Magento API uses: JSON true/false, numbers (0 is false, anything else
+// is true — is_filterable for example uses 0/1/2) and strings such as "0",
+// "1", "2", "true" and "false".
+//
+// It remembers the original JSON token, so values a plain bool cannot
+// express survive a read-modify-write round-trip unchanged: an attribute
+// stored with is_filterable=2 ("Filterable (no results)") is marshaled back
+// as 2, not silently downgraded to true/1. If Value is changed after
+// unmarshaling (so it no longer matches the remembered token), the plain
+// bool representation of Value is marshaled instead.
+type FlexBool struct {
+	// Value is the parsed boolean interpretation.
+	Value bool
+
+	// raw is the original JSON token (only stored when it carries more
+	// information than a plain bool, e.g. 2 or "1"); rawValue is the bool
+	// it decoded to, used to detect Value being changed afterwards.
+	raw      string
+	rawValue bool
+}
+
+// NewFlexBool returns a FlexBool holding v that marshals as a plain JSON
+// bool.
+func NewFlexBool(v bool) FlexBool {
+	return FlexBool{Value: v}
+}
+
+// Bool returns the parsed boolean interpretation.
+func (b FlexBool) Bool() bool {
+	return b.Value
+}
 
 func (b *FlexBool) UnmarshalJSON(data []byte) error {
 	raw := strings.TrimSpace(string(data))
 	switch raw {
 	case "true":
-		*b = true
+		*b = FlexBool{Value: true}
 		return nil
 	case "false", "null":
-		*b = false
+		*b = FlexBool{}
 		return nil
 	}
 
@@ -32,17 +58,18 @@ func (b *FlexBool) UnmarshalJSON(data []byte) error {
 		}
 		switch strings.ToLower(strings.TrimSpace(s)) {
 		case "", "false":
-			*b = false
+			*b = FlexBool{Value: false, raw: raw, rawValue: false}
 			return nil
 		case "true":
-			*b = true
+			*b = FlexBool{Value: true, raw: raw, rawValue: true}
 			return nil
 		default:
 			f, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
 			if err != nil {
 				return fmt.Errorf("magento2: cannot unmarshal %s into FlexBool", raw)
 			}
-			*b = f != 0
+			v := f != 0
+			*b = FlexBool{Value: v, raw: raw, rawValue: v}
 			return nil
 		}
 	}
@@ -51,12 +78,16 @@ func (b *FlexBool) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("magento2: cannot unmarshal %s into FlexBool", raw)
 	}
-	*b = f != 0
+	v := f != 0
+	*b = FlexBool{Value: v, raw: raw, rawValue: v}
 	return nil
 }
 
 func (b FlexBool) MarshalJSON() ([]byte, error) {
-	if b {
+	if b.raw != "" && b.rawValue == b.Value {
+		return []byte(b.raw), nil
+	}
+	if b.Value {
 		return []byte("true"), nil
 	}
 	return []byte("false"), nil

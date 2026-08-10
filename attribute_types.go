@@ -40,8 +40,8 @@ type Attribute struct {
 	IsWysiwygEnabled          bool                `json:"is_wysiwyg_enabled,omitempty"`
 	IsHTMLAllowedOnFront      bool                `json:"is_html_allowed_on_front,omitempty"`
 	UsedForSortBy             bool                `json:"used_for_sort_by,omitempty"`
-	IsFilterable              FlexBool            `json:"is_filterable,omitempty"`
-	IsFilterableInSearch      FlexBool            `json:"is_filterable_in_search,omitempty"`
+	IsFilterable              FlexBool            `json:"is_filterable,omitzero"`
+	IsFilterableInSearch      FlexBool            `json:"is_filterable_in_search,omitzero"`
 	IsUsedInGrid              bool                `json:"is_used_in_grid,omitempty"`
 	IsVisibleInGrid           bool                `json:"is_visible_in_grid,omitempty"`
 	IsFilterableInGrid        bool                `json:"is_filterable_in_grid,omitempty"`

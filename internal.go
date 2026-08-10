@@ -35,7 +35,7 @@ func mayReturnErrorForHTTPResponse(resp *resty.Response, triedTo string) error {
 
 	if resp.StatusCode() == http.StatusNotFound {
 		apiErr.sentinel = ErrNotFound
-		logger.Warn().
+		logger().Warn().
 			Int("statusCode", resp.StatusCode()).
 			Str("operation", triedTo).
 			Str("responseBody", apiErr.Body).
@@ -45,7 +45,7 @@ func mayReturnErrorForHTTPResponse(resp *resty.Response, triedTo string) error {
 
 	// All other non-2xx responses keep the historical ErrBadRequest sentinel.
 	apiErr.sentinel = ErrBadRequest
-	logger.Error().
+	logger().Error().
 		Int("statusCode", resp.StatusCode()).
 		Str("operation", triedTo).
 		Str("responseBody", apiErr.Body).

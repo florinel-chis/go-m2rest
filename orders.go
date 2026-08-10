@@ -66,7 +66,7 @@ func GetOrderByIncrementID(id string, apiClient *Client) (*MOrder, error) {
 
 	endpoint := Orders + "?" + searchQuery
 
-	logger.Debug().
+	logger().Debug().
 		Str("incrementID", id).
 		Str("endpoint", endpoint).
 		Msg("Getting order by increment ID")
@@ -77,7 +77,7 @@ func GetOrderByIncrementID(id string, apiClient *Client) (*MOrder, error) {
 	}
 
 	if len(response.Items) == 0 {
-		logger.Warn().Str("incrementID", id).Msg("Order not found by increment ID")
+		logger().Warn().Str("incrementID", id).Msg("Order not found by increment ID")
 		return nil, ErrNotFound
 	}
 
@@ -101,7 +101,7 @@ func (mo *MOrder) UpdateEntity(order *Order) error {
 		Entity: *order,
 	}
 
-	logger.Debug().
+	logger().Debug().
 		Int("orderID", mo.Order.EntityID).
 		Str("endpoint", Orders).
 		Interface("payload", payLoad).
@@ -110,11 +110,11 @@ func (mo *MOrder) UpdateEntity(order *Order) error {
 	resp, err := mo.APIClient.HTTPClient.R().SetResult(mo.Order).SetBody(payLoad).Post(Orders)
 
 	if err != nil {
-		logger.Error().Err(err).Msg("Error updating order entity")
+		logger().Error().Err(err).Msg("Error updating order entity")
 		return fmt.Errorf("error updating order entity: %w", err)
 	}
 
-	logger.Debug().
+	logger().Debug().
 		Int("status", resp.StatusCode()).
 		Str("body", resp.String()).
 		Msg("Order entity updated response from remote")
@@ -127,16 +127,16 @@ func (mo *MOrder) UpdateEntity(order *Order) error {
 }
 
 func (mo *MOrder) UpdateFromRemote() error {
-	logger.Debug().
+	logger().Debug().
 		Str("route", mo.Route).
 		Msg("Updating order details from remote")
 
 	err := mo.APIClient.GetRouteAndDecode(mo.Route, mo.Order, "get detailed order object from magento2-api")
 	if err != nil {
-		logger.Error().Err(err).Msg("Error updating order details from remote")
+		logger().Error().Err(err).Msg("Error updating order details from remote")
 		return fmt.Errorf("error updating order details from remote: %w", err)
 	}
-	logger.Debug().Interface("order", mo.Order).Msg("Order details updated from remote successfully")
+	logger().Debug().Interface("order", mo.Order).Msg("Order details updated from remote successfully")
 	return nil
 }
 
@@ -151,7 +151,7 @@ func (mo *MOrder) AddComment(comment *StatusHistory) (StatusHistory, error) {
 		StatusHistory: *comment,
 	}
 
-	logger.Debug().
+	logger().Debug().
 		Int("orderID", mo.Order.EntityID).
 		Str("endpoint", endpoint).
 		Interface("payload", payLoad).
@@ -162,9 +162,9 @@ func (mo *MOrder) AddComment(comment *StatusHistory) (StatusHistory, error) {
 
 	err := mo.APIClient.PostRouteAndDecode(endpoint, payLoad, &response, "add comment to order")
 	if err != nil {
-		logger.Error().Err(err).Msg("Error adding comment to order")
+		logger().Error().Err(err).Msg("Error adding comment to order")
 		return response, fmt.Errorf("error adding comment to order: %w", err)
 	}
-	logger.Debug().Interface("commentResponse", response).Msg("Comment added to order successfully")
+	logger().Debug().Interface("commentResponse", response).Msg("Comment added to order successfully")
 	return response, nil
 }

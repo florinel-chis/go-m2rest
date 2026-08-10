@@ -3,6 +3,7 @@ package magento2
 import (
 	"context"
 	"fmt"
+	"reflect"
 )
 
 // GetProductsPage fetches a single page of products (GET /products) using
@@ -18,9 +19,10 @@ func GetProductsPage(ctx context.Context, c *Client, opts ListOptions) (*Product
 
 // IterateProducts pages through GET /products, calling fn for every product.
 // Pagination starts at opts.CurrentPage (or page 1 when unset) and stops when
-// all total_count items were seen or an empty page is returned (guarding
-// against total_count drift while iterating). If fn returns an error the
-// iteration is aborted and that error is returned.
+// all total_count items were seen, an empty page is returned, or a page
+// repeats the previous one (Magento clamps out-of-range pages to the last
+// page, so a repeated page signals total_count drift while iterating). If fn
+// returns an error the iteration is aborted and that error is returned.
 func IterateProducts(ctx context.Context, c *Client, opts ListOptions, fn func(Product) error) error {
 	return iteratePages(ctx, opts, func(pageOpts ListOptions) ([]Product, int, error) {
 		page, err := GetProductsPage(ctx, c, pageOpts)
@@ -96,9 +98,13 @@ func GetCategoryTree(ctx context.Context, c *Client) (*CategoryTreeNode, error) 
 }
 
 // iteratePages drives page-by-page iteration for list endpoints. It stops
-// when the collected item count reaches the reported total_count or when a
-// page comes back empty, which guards against total_count drifting while
-// iterating (and against infinite loops).
+// when the collected item count reaches the reported total_count, when a
+// page comes back empty, or when a page repeats the previous one verbatim.
+// The last two guard against total_count drifting while iterating (and
+// against infinite loops): Magento's collection layer clamps an
+// out-of-range currentPage to the last page and re-serves the final page's
+// items instead of returning an empty page, so a repeated page means the
+// end was reached and must not be delivered twice.
 func iteratePages[T any](ctx context.Context, opts ListOptions, fetch func(ListOptions) ([]T, int, error), fn func(T) error) error {
 	if opts.CurrentPage <= 0 {
 		opts.CurrentPage = 1
@@ -108,6 +114,7 @@ func iteratePages[T any](ctx context.Context, opts ListOptions, fetch func(ListO
 	}
 
 	collected := 0
+	var prevPage []T
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -118,6 +125,11 @@ func iteratePages[T any](ctx context.Context, opts ListOptions, fetch func(ListO
 			return err
 		}
 		if len(items) == 0 {
+			return nil
+		}
+		if prevPage != nil && reflect.DeepEqual(items, prevPage) {
+			// Magento clamped the page number to the last page: the end
+			// was reached even though total_count claims more items.
 			return nil
 		}
 
@@ -131,6 +143,7 @@ func iteratePages[T any](ctx context.Context, opts ListOptions, fetch func(ListO
 		if collected >= totalCount {
 			return nil
 		}
+		prevPage = items
 		opts.CurrentPage++
 	}
 }

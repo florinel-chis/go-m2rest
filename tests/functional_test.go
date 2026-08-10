@@ -11,9 +11,12 @@ import (
 )
 
 // skipWithoutMagentoHost skips live-server tests when no Magento instance is
-// configured via the MAGENTO_HOST environment variable.
+// configured via the MAGENTO_HOST environment variable (either in the
+// process environment or in a .env file, the same sources SetupTestClient
+// reads).
 func skipWithoutMagentoHost(t *testing.T) {
 	t.Helper()
+	loadDotEnv()
 	if os.Getenv("MAGENTO_HOST") == "" {
 		t.Skip("MAGENTO_HOST not set; skipping live-server test")
 	}
