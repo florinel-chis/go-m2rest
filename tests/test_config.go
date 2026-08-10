@@ -142,17 +142,17 @@ func SetupTestClient() (*magento2.Client, *TestConfig, error) {
 func loadDotEnv() {
 	// Try current directory first, then parent directory
 	envPaths := []string{".env", "../.env"}
-	
+
 	var file *os.File
 	var err error
-	
+
 	for _, path := range envPaths {
 		file, err = os.Open(path)
 		if err == nil {
 			break
 		}
 	}
-	
+
 	if err != nil {
 		return // .env file doesn't exist, which is fine
 	}
@@ -170,7 +170,7 @@ func loadDotEnv() {
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		
+
 		// Skip empty lines and comments
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue

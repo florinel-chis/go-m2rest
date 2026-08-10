@@ -8,6 +8,7 @@ import (
 )
 
 func TestCartDebug_UseExistingProduct(t *testing.T) {
+	skipWithoutMagentoHost(t)
 	client, _, err := SetupTestClient()
 	if err != nil {
 		t.Fatalf("Failed to setup test client: %v", err)
@@ -24,11 +25,11 @@ func TestCartDebug_UseExistingProduct(t *testing.T) {
 	// Try with some common/existing SKUs that might exist in the system
 	testSKUs := []string{
 		"test-product-1748593413", // From our earlier successful test
-		"24-MB01",    // Common Magento sample product
-		"24-MB02",    // Common Magento sample product  
-		"24-WG80",    // Common Magento sample product
-		"simple",     // Generic simple product
-		"configurable", // Generic configurable product
+		"24-MB01",                 // Common Magento sample product
+		"24-MB02",                 // Common Magento sample product
+		"24-WG80",                 // Common Magento sample product
+		"simple",                  // Generic simple product
+		"configurable",            // Generic configurable product
 	}
 
 	for _, sku := range testSKUs {
@@ -50,8 +51,8 @@ func TestCartDebug_UseExistingProduct(t *testing.T) {
 
 			// Try to add to cart
 			item := magento2.CartItem{
-				Sku: sku,
-				Qty: 1,
+				Sku:     sku,
+				Qty:     1,
 				QuoteID: guestCart.QuoteID,
 			}
 

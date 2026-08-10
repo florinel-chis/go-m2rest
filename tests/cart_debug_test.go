@@ -11,6 +11,7 @@ import (
 )
 
 func TestCartDebug_AddItemPayload(t *testing.T) {
+	skipWithoutMagentoHost(t)
 	client, _, err := SetupTestClient()
 	if err != nil {
 		t.Fatalf("Failed to setup test client: %v", err)
@@ -58,23 +59,23 @@ func TestCartDebug_AddItemPayload(t *testing.T) {
 	log.Info().Str("cartID", guestCart.QuoteID).Str("sku", sku).Msg("Testing cart item addition")
 
 	// Let's try different payload structures to see what Magento expects
-	
+
 	// Test 1: Current structure
 	t.Run("Current Structure", func(t *testing.T) {
 		item := magento2.CartItem{
-			Sku: sku,
-			Qty: 1,
+			Sku:     sku,
+			Qty:     1,
 			QuoteID: guestCart.QuoteID,
 		}
-		
+
 		type PayLoad struct {
 			CartItem magento2.CartItem `json:"cartItem"`
 		}
-		
+
 		payload := &PayLoad{CartItem: item}
 		payloadJSON, _ := json.MarshalIndent(payload, "", "  ")
 		t.Logf("Current payload structure:\n%s", payloadJSON)
-		
+
 		// Try adding with current structure
 		err := guestCart.AddItems([]magento2.CartItem{item})
 		if err != nil {
@@ -90,33 +91,33 @@ func TestCartDebug_AddItemPayload(t *testing.T) {
 		// Based on Magento 2 docs, it might expect a different structure
 		endpoint := guestCart.Route + "/items"
 		httpClient := client.HTTPClient
-		
+
 		// Try structure: {"cartItem": {"sku": "...", "qty": 1}}
 		type SimpleCartItem struct {
 			Sku string  `json:"sku"`
 			Qty float64 `json:"qty"`
 		}
-		
+
 		type PayLoad struct {
 			CartItem SimpleCartItem `json:"cartItem"`
 		}
-		
+
 		item := SimpleCartItem{
 			Sku: sku,
 			Qty: 1,
 		}
-		
+
 		payload := &PayLoad{CartItem: item}
 		payloadJSON, _ := json.MarshalIndent(payload, "", "  ")
 		t.Logf("Alternative payload structure 1:\n%s", payloadJSON)
-		
+
 		resp, err := httpClient.R().SetBody(payload).Post(endpoint)
 		if err != nil {
 			t.Logf("Request error: %v", err)
 		} else {
 			t.Logf("Response status: %d", resp.StatusCode())
 			t.Logf("Response body: %s", resp.String())
-			
+
 			if resp.IsSuccess() {
 				t.Log("Alternative structure 1 worked!")
 				return
@@ -128,28 +129,28 @@ func TestCartDebug_AddItemPayload(t *testing.T) {
 	t.Run("Alternative Structure 2", func(t *testing.T) {
 		endpoint := guestCart.Route + "/items"
 		httpClient := client.HTTPClient
-		
+
 		// Try direct structure without wrapper
 		type DirectCartItem struct {
 			Sku string  `json:"sku"`
 			Qty float64 `json:"qty"`
 		}
-		
+
 		item := DirectCartItem{
 			Sku: sku,
 			Qty: 1,
 		}
-		
+
 		payloadJSON, _ := json.MarshalIndent(item, "", "  ")
 		t.Logf("Direct payload structure:\n%s", payloadJSON)
-		
+
 		resp, err := httpClient.R().SetBody(item).Post(endpoint)
 		if err != nil {
 			t.Logf("Request error: %v", err)
 		} else {
 			t.Logf("Response status: %d", resp.StatusCode())
 			t.Logf("Response body: %s", resp.String())
-			
+
 			if resp.IsSuccess() {
 				t.Log("Direct structure worked!")
 				return
@@ -161,7 +162,7 @@ func TestCartDebug_AddItemPayload(t *testing.T) {
 	t.Run("Inspect Current Cart", func(t *testing.T) {
 		endpoint := guestCart.Route
 		httpClient := client.HTTPClient
-		
+
 		resp, err := httpClient.R().Get(endpoint)
 		if err != nil {
 			t.Logf("Failed to get cart: %v", err)

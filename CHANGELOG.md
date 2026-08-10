@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - 2026-08-10
+
+#### Catalog sync / read API (context-first)
+- `ListOptions` with `Encode()` producing Magento `searchCriteria` query params (filter groups, `pageSize` — defaults to 100 when unset, `currentPage`, `sortOrders`)
+- `GetProductsPage` / `IterateProducts` (GET `/products`) with pagination that terminates on `total_count` or an empty page (guards against drift and infinite loops)
+- `GetAttributesPage` / `IterateAttributes` (GET `/products/attributes`)
+- `GetAttributeSetsList` (GET `/products/attribute-sets/sets/list`, paginates internally) and `GetAttributeSetAttributes` (GET `/products/attribute-sets/{id}/attributes`)
+- `GetCategoryTree` (GET `/categories`) returning a nested `CategoryTreeNode`
+- `GetStoreViews` (GET `/store/storeViews`) and `GetWebsites` (GET `/store/websites`)
+- Context plumbing: `(*Client).GetRouteAndDecodeCtx` / `PostRouteAndDecodeCtx`; existing non-ctx helpers delegate with `context.Background()`
+- `(*Client).SetTimeout` and `(*Client).SetRetryPolicy`
+- `StoreConfig.BasePath` for installations served from a sub-directory (`{scheme}://{host}/{basePath}/rest/{storeCode}/V1`, slashes normalized; empty keeps previous behavior; `HostName` may still include a port)
+- `FlexBool` type accepting JSON bools, numbers (0 = false, anything else true — `is_filterable` uses 0/1/2) and strings `"0"`/`"1"`/`"2"`/`"true"`/`"false"`; marshals as plain bool. `Attribute.IsFilterable` and `Attribute.IsFilterableInSearch` now use it
+- Offline unit test suite (httptest-based) covering pagination, searchCriteria encoding, retries/Retry-After, typed errors, context cancellation, FlexBool and response decoding
+
+### Changed - 2026-08-10
+- Default per-attempt HTTP timeout of 30s on all constructors
+- Retries now cover 429, 500, 502, 503 and 504, honor the `Retry-After` header (seconds), and default to 4 retries (5 total attempts) with 500ms base / 20s max wait
+- HTTP errors now carry a typed `*APIError` (`StatusCode`, `Endpoint`, `Body` truncated to 500 bytes) extractable via `errors.As`; `errors.Is(err, ErrNotFound)` / `errors.Is(err, ErrBadRequest)` keep working
+- The logger no longer hijacks the process-global zerolog logger on import: the package is silent by default (no-op logger); use `SetZeroLogger` or `EnableDebugLogging` to opt in
+- Replaced deprecated resty `SetHostURL` with `SetBaseURL`
+- Live functional tests under `tests/` now `t.Skip` when `MAGENTO_HOST` is unset instead of failing
+
+### Fixed - 2026-08-10
+- Corrupted generated field `WrappingAddPrfloat64edCard` (json `wrapping_add_prfloat64ed_card`) renamed to `WrappingAddPrintedCard` with json tag `wrapping_add_printed_card` in both `common_types.go` and `orders_types.go`
+
+---
+
 ### Changed - 2025-01-15
 
 #### Dependencies Update

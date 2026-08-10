@@ -4,13 +4,14 @@
 
 **A Modern and Robust Golang Library for Magento 2 REST API**
 
-This Golang library provides a comprehensive interface for interacting with the Magento 2 REST API. Built with modern Go practices (1.21+), it features structured logging, concurrent operations, and extensive test coverage.
+This Golang library provides a comprehensive interface for interacting with the Magento 2 REST API. Built with modern Go practices (1.25+), it features a context-aware read/sync API, structured logging, hardened retries, and an offline (httptest-based) unit test suite.
 
 ## Features
 
-* **Modern Go Practices:** Uses Go 1.25+ features including the `any` type, structured errors with wrapping, and context support
-* **Comprehensive Logging:** Structured logging with zerolog for better debugging and monitoring
-* **Robust Error Handling:** Custom error types for common Magento 2 API scenarios
+* **Context support:** All new read/sync functions are `context.Context`-first (`GetProductsPage`, `IterateProducts`, ...); generic `GetRouteAndDecodeCtx`/`PostRouteAndDecodeCtx` helpers are available on the client, and the legacy non-ctx API keeps working
+* **Catalog sync API:** Paginated product/attribute listing with iteration helpers, attribute sets, category tree, store views and websites
+* **Comprehensive Logging:** Structured logging with zerolog; silent (no-op) by default, opt-in via `SetZeroLogger`/`EnableDebugLogging`
+* **Robust Error Handling:** Typed `APIError` (status code, endpoint, truncated body) that still matches the `ErrNotFound`/`ErrBadRequest` sentinels via `errors.Is`
 * **Authentication Support:** Multiple authentication methods including Integration tokens, Customer tokens, and Admin credentials
 * **Extensive API Coverage:**
     * **Products:** Simple, configurable, bundle, grouped, and virtual products
@@ -19,9 +20,9 @@ This Golang library provides a comprehensive interface for interacting with the 
     * **Carts:** Guest and customer cart management with full checkout flow
     * **Orders:** Order retrieval, updates, and comments
     * **Stock Management:** Inventory updates and stock status
-* **Performance Features:**
-    * Automatic retry logic for transient errors
-    * Concurrent operations support
+* **Performance & Reliability:**
+    * 30s per-attempt timeout by default (`SetTimeout` to override)
+    * Automatic retries on 429/500/502/503/504 honoring the `Retry-After` header (`SetRetryPolicy` to override)
     * Connection pooling via resty v2
 
 ## Getting Started
@@ -88,18 +89,67 @@ func main() {
 }
 ```
 
+## Catalog sync
+
+The library ships a context-aware read API designed for synchronizing a catalog into another system: paginated listing with automatic iteration, attribute metadata, attribute sets, the category tree, and store scopes.
+
+```go
+ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+defer cancel()
+
+// Iterate all products updated since the last sync run. Pagination is
+// handled internally (stops on total_count or an empty page).
+opts := magento2.ListOptions{
+    PageSize:  200,
+    SortField: "updated_at",
+    SortDir:   "ASC",
+    Criteria: []magento2.SearchQueryCriteria{{
+        Fields: []magento2.FilterFields{{
+            Field:         magento2.Filter{FilterGroups: 0, Filters: 0, FilterFor: "updated_at"},
+            Value:         magento2.Filter{FilterGroups: 0, Filters: 0, FilterFor: "2026-01-01 00:00:00"},
+            ConditionType: magento2.Filter{FilterGroups: 0, Filters: 0, FilterFor: "gt"},
+        }},
+    }},
+}
+err := magento2.IterateProducts(ctx, client, opts, func(p magento2.Product) error {
+    fmt.Println(p.Sku, p.Name, p.UpdatedAt)
+    return nil // return an error to abort the iteration
+})
+
+// Fetch a single page of attribute metadata.
+attrPage, err := magento2.GetAttributesPage(ctx, client, magento2.ListOptions{PageSize: 100, CurrentPage: 1})
+for _, a := range attrPage.Items {
+    fmt.Println(a.AttributeCode, bool(a.IsFilterable))
+}
+
+// Related helpers:
+//   magento2.GetProductsPage(ctx, client, opts)      // single page of products
+//   magento2.IterateAttributes(ctx, client, opts, fn)
+//   magento2.GetAttributeSetsList(ctx, client)       // all attribute sets
+//   magento2.GetAttributeSetAttributes(ctx, client, setID)
+//   magento2.GetCategoryTree(ctx, client)            // nested CategoryTreeNode
+//   magento2.GetStoreViews(ctx, client)
+//   magento2.GetWebsites(ctx, client)
+```
+
+Notes:
+
+* `ListOptions.Encode()` produces the Magento `searchCriteria` query parameters (filter groups, `pageSize`, `currentPage`, `sortOrders`). A `PageSize <= 0` encodes as 100.
+* `Attribute.IsFilterable` and `Attribute.IsFilterableInSearch` are of type `FlexBool`, which tolerates the mixed encodings Magento emits (`true`/`false`, `0`/`1`/`2`, `"0"`/`"1"`/`"2"`, `"true"`/`"false"`) and always marshals as a plain JSON bool.
+
 ## Testing
 
-The library includes comprehensive test coverage with both unit and functional tests.
+The library includes an offline unit test suite (httptest-based, no live Magento needed) plus optional live functional tests.
 
 ### Running Tests
 
 ```bash
-# Run all tests
+# Run all tests; the live functional tests under ./tests are skipped
+# automatically when MAGENTO_HOST is not set
 go test ./...
 
-# Run tests from the tests directory
-go test ./tests -v
+# Run the live tests against a real Magento instance
+MAGENTO_HOST=http://magento.local MAGENTO_BEARER_TOKEN=token go test ./tests -v
 
 # Run specific test
 go test ./tests -run TestAdvancedProducts_VirtualProduct -v
@@ -324,26 +374,34 @@ go-m2rest/
 
 ## Error Handling
 
-The library provides structured error types:
+The library provides structured error types. HTTP errors carry a typed `*APIError` (status code, endpoint, response body truncated to 500 bytes) and still match the historical sentinels via `errors.Is`:
 
 ```go
 product, err := magento2.GetProductBySKU("non-existent", client)
 if err != nil {
-    if err == magento2.ErrNotFound {
+    if errors.Is(err, magento2.ErrNotFound) {
         // Handle not found case
-    } else {
-        // Handle other errors
+    }
+    var apiErr *magento2.APIError
+    if errors.As(err, &apiErr) {
+        log.Printf("status=%d endpoint=%s body=%s", apiErr.StatusCode, apiErr.Endpoint, apiErr.Body)
     }
 }
 ```
 
 ## Logging
 
-The library uses zerolog for structured logging:
+The library uses zerolog for structured logging, but is **silent by default**: importing the package no longer installs a console writer on the global zerolog logger (this used to hijack the logging setup of importing applications). To see logs:
 
 ```go
-// Logs are automatically structured with context
-// Output includes API endpoints, payloads, and responses
+// Route the library's logs into your own zerolog logger
+magento2.SetZeroLogger(myLogger)
+
+// Or explicitly enable a debug-level console logger on stderr
+magento2.EnableDebugLogging()
+
+// Back to silent
+magento2.DisableDebugLogging()
 ```
 
 ## Contributing
@@ -386,6 +444,7 @@ For issues, feature requests, or questions:
 ## Changelog
 
 ### Recent Updates
+- **2026-08-10:** Catalog sync read API (ctx-first pagination/iteration helpers), context support, default timeouts, 429/`Retry-After` aware retries, typed `APIError`, no-op logger by default (no more global zerolog hijack), `FlexBool`, `WrappingAddPrintedCard` fix, `StoreConfig.BasePath` — see CHANGELOG.md
 - **2025-01-15:** Updated to Go 1.25+ with latest dependency versions
   - Go toolchain: 1.25.1
   - Updated all dependencies to latest stable versions

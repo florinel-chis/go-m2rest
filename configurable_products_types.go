@@ -1,18 +1,18 @@
 package magento2
 
 type ConfigurableProductOption struct {
-	ID                  int         `json:"id,omitempty"`
-	AttributeID         string      `json:"attribute_id"`
-	Label               string      `json:"label"`
-	Position            int         `json:"position"`
-	IsUseDefault        bool        `json:"is_use_default"`
-	Values              []Value     `json:"values"`
-	ExtensionAttributes any `json:"extension_attributes,omitempty"`
-	ProductID           int         `json:"product_id,omitempty"`
+	ID                  int     `json:"id,omitempty"`
+	AttributeID         string  `json:"attribute_id"`
+	Label               string  `json:"label"`
+	Position            int     `json:"position"`
+	IsUseDefault        bool    `json:"is_use_default"`
+	Values              []Value `json:"values"`
+	ExtensionAttributes any     `json:"extension_attributes,omitempty"`
+	ProductID           int     `json:"product_id,omitempty"`
 }
 
 type Value struct {
-	ValueIndex          int         `json:"value_index,omitempty"`
+	ValueIndex          int `json:"value_index,omitempty"`
 	ExtensionAttributes any `json:"extension_attributes,omitempty"`
 }
 

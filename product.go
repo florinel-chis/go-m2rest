@@ -2,8 +2,6 @@ package magento2
 
 import (
 	"fmt"
-
-	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -54,7 +52,7 @@ func (mProduct *MProduct) createOrReplaceProduct(saveOptions bool) error {
 		SaveOptions: saveOptions,
 	}
 
-	log.Debug().
+	logger.Debug().
 		Str("sku", mProduct.Product.Sku).
 		Bool("saveOptions", saveOptions).
 		Str("endpoint", endpoint).
@@ -66,11 +64,11 @@ func (mProduct *MProduct) createOrReplaceProduct(saveOptions bool) error {
 	mProduct.Route = products + "/" + productSKU
 
 	if err != nil {
-		log.Error().Err(err).Msg("Error creating or replacing product")
+		logger.Error().Err(err).Msg("Error creating or replacing product")
 		return fmt.Errorf("error creating or replacing product: %w", err)
 	}
 
-	log.Debug().
+	logger.Debug().
 		Int("status", resp.StatusCode()).
 		Str("body", resp.String()).
 		Msg("Product creation/replacement response from remote")
@@ -85,18 +83,18 @@ func (mProduct *MProduct) createOrReplaceProduct(saveOptions bool) error {
 func (mProduct *MProduct) UpdateProductFromRemote() error {
 	httpClient := mProduct.APIClient.HTTPClient
 
-	log.Debug().
+	logger.Debug().
 		Str("route", mProduct.Route).
 		Msg("Updating product details from remote")
 
 	resp, err := httpClient.R().SetResult(mProduct.Product).Get(mProduct.Route)
 
 	if err != nil {
-		log.Error().Err(err).Msg("Error updating product details from remote")
+		logger.Error().Err(err).Msg("Error updating product details from remote")
 		return fmt.Errorf("error updating product details from remote: %w", err)
 	}
 
-	log.Debug().
+	logger.Debug().
 		Int("status", resp.StatusCode()).
 		Str("body", resp.String()).
 		Msg("Product details updated response from remote")
@@ -113,7 +111,7 @@ func (mProduct *MProduct) UpdateQuantityForStockItem(stockItem string, quantity 
 
 	updateStockPayload := updateStockPayload{StockItem: StockItem{Qty: quantity, IsInStock: isInStock}}
 
-	log.Debug().
+	logger.Debug().
 		Str("stockItem", stockItem).
 		Str("sku", mProduct.Product.Sku).
 		Int("quantity", quantity).
@@ -125,11 +123,11 @@ func (mProduct *MProduct) UpdateQuantityForStockItem(stockItem string, quantity 
 	resp, err := httpClient.R().SetBody(updateStockPayload).Put(mProduct.Route + "/" + stockItemsRelative + "/" + stockItem)
 
 	if err != nil {
-		log.Error().Err(err).Msg("Error updating stock for product")
+		logger.Error().Err(err).Msg("Error updating stock for product")
 		return fmt.Errorf("error updating stock for product: %w", err)
 	}
 
-	log.Debug().
+	logger.Debug().
 		Int("status", resp.StatusCode()).
 		Str("body", resp.String()).
 		Msg("Product stock updated response status from remote")

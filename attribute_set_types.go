@@ -1,11 +1,11 @@
 package magento2
 
 type AttributeSet struct {
-	AttributeSetID      int         `json:"attribute_set_id,omitempty"`
-	AttributeSetName    string      `json:"attribute_set_name"`
-	SortOrder           int         `json:"sort_order"`
-	EntityTypeID        int         `json:"entity_type_id,omitempty"`
-	ExtensionAttributes any `json:"extension_attributes,omitempty"`
+	AttributeSetID      int    `json:"attribute_set_id,omitempty"`
+	AttributeSetName    string `json:"attribute_set_name"`
+	SortOrder           int    `json:"sort_order"`
+	EntityTypeID        int    `json:"entity_type_id,omitempty"`
+	ExtensionAttributes any    `json:"extension_attributes,omitempty"`
 }
 
 type Group struct {

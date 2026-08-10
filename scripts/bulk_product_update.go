@@ -22,10 +22,10 @@ type StockUpdate struct {
 func main() {
 	// Command line flags
 	var (
-		csvFile     = flag.String("csv", "stock_updates.csv", "CSV file with SKU and quantity")
-		createOnly  = flag.Bool("create-only", false, "Only create products, don't update stock")
-		updateOnly  = flag.Bool("update-only", false, "Only update stock, don't create products")
-		concurrent  = flag.Int("concurrent", 5, "Number of concurrent operations")
+		csvFile      = flag.String("csv", "stock_updates.csv", "CSV file with SKU and quantity")
+		createOnly   = flag.Bool("create-only", false, "Only create products, don't update stock")
+		updateOnly   = flag.Bool("update-only", false, "Only update stock, don't create products")
+		concurrent   = flag.Int("concurrent", 5, "Number of concurrent operations")
 		productCount = flag.Int("count", 100, "Number of products to create")
 	)
 	flag.Parse()
@@ -57,7 +57,7 @@ func main() {
 	if !*updateOnly {
 		logger.Info().Int("count", *productCount).Msg("Creating simple products")
 		createdSKUs := createBulkProducts(client, *productCount, *concurrent, &logger)
-		
+
 		// Save created SKUs to CSV if we're only creating
 		if *createOnly {
 			if err := saveCreatedSKUsToCSV(*csvFile, createdSKUs); err != nil {
@@ -136,7 +136,7 @@ func createBulkProducts(client *magento2.Client, count int, concurrent int, logg
 		products[i] = magento2.Product{
 			Sku:            sku,
 			Name:           fmt.Sprintf("Bulk Product %d", i+1),
-			AttributeSetID: 4, // Default attribute set
+			AttributeSetID: 4,                    // Default attribute set
 			Price:          9.99 + float64(i%10), // Vary price slightly
 			TypeID:         "simple",
 			Status:         1, // Enabled
@@ -312,7 +312,7 @@ func saveCreatedSKUsToCSV(filename string, skus []string) error {
 
 	// Write SKUs with random quantities
 	for _, sku := range skus {
-		qty := 10 + (time.Now().UnixNano()%90) // Random qty between 10-100
+		qty := 10 + (time.Now().UnixNano() % 90) // Random qty between 10-100
 		if err := writer.Write([]string{sku, fmt.Sprintf("%d", qty)}); err != nil {
 			return fmt.Errorf("failed to write row: %w", err)
 		}

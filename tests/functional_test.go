@@ -2,6 +2,7 @@ package magento2
 
 import (
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -9,7 +10,17 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// skipWithoutMagentoHost skips live-server tests when no Magento instance is
+// configured via the MAGENTO_HOST environment variable.
+func skipWithoutMagentoHost(t *testing.T) {
+	t.Helper()
+	if os.Getenv("MAGENTO_HOST") == "" {
+		t.Skip("MAGENTO_HOST not set; skipping live-server test")
+	}
+}
+
 func setupTestClientV2(t *testing.T) (*magento2.Client, *TestConfig) {
+	skipWithoutMagentoHost(t)
 	client, config, err := SetupTestClient()
 	if err != nil {
 		t.Fatalf("Failed to setup test client: %v", err)
@@ -20,7 +31,7 @@ func setupTestClientV2(t *testing.T) (*magento2.Client, *TestConfig) {
 
 func TestFunctionalV2_APIConnection(t *testing.T) {
 	client, _ := setupTestClientV2(t)
-	
+
 	// Simple test to verify connection works
 	t.Run("Test API Connection", func(t *testing.T) {
 		// Try to get a product that likely doesn't exist
@@ -40,7 +51,7 @@ func TestFunctionalV2_Products(t *testing.T) {
 	t.Run("Create and Retrieve Product", func(t *testing.T) {
 		// Create a unique SKU
 		sku := fmt.Sprintf("test-product-%d", time.Now().Unix())
-		
+
 		product := magento2.Product{
 			Sku:            sku,
 			Name:           "Test Product",
@@ -74,7 +85,7 @@ func TestFunctionalV2_Products(t *testing.T) {
 		}
 
 		if retrieved.Product.Sku != sku {
-			t.Errorf("Retrieved product SKU mismatch: got %s, want %s", 
+			t.Errorf("Retrieved product SKU mismatch: got %s, want %s",
 				retrieved.Product.Sku, sku)
 		}
 
@@ -101,7 +112,7 @@ func TestFunctionalV2_Products(t *testing.T) {
 	t.Run("Search Products", func(t *testing.T) {
 		// Simple search query
 		query := magento2.BuildSearchQuery("type_id", "simple", "eq")
-		
+
 		// Note: We need to check if there's a GetProducts function
 		// For now, let's test the query building
 		t.Logf("Built search query: %s", query)
@@ -122,7 +133,7 @@ func TestFunctionalV2_Categories(t *testing.T) {
 				return
 			}
 		}
-		
+
 		log.Info().
 			Int("id", category.Category.ID).
 			Str("name", category.Category.Name).
@@ -131,9 +142,9 @@ func TestFunctionalV2_Categories(t *testing.T) {
 
 	t.Run("Create Category", func(t *testing.T) {
 		category := magento2.Category{
-			Name:       fmt.Sprintf("Test Category %d", time.Now().Unix()),
-			IsActive:   true,
-			ParentID:   2, // Assuming 2 is root
+			Name:          fmt.Sprintf("Test Category %d", time.Now().Unix()),
+			IsActive:      true,
+			ParentID:      2, // Assuming 2 is root
 			IncludeInMenu: true,
 		}
 
@@ -165,14 +176,14 @@ func TestFunctionalV2_Attributes(t *testing.T) {
 
 	t.Run("Create and Retrieve Attribute", func(t *testing.T) {
 		attributeCode := fmt.Sprintf("test_attr_%d", time.Now().Unix())
-		
+
 		attribute := magento2.Attribute{
-			AttributeCode: attributeCode,
-			FrontendInput: "text",
+			AttributeCode:        attributeCode,
+			FrontendInput:        "text",
 			DefaultFrontendLabel: "Test Attribute",
-			IsRequired:    false,
-			Scope:         "global",
-			EntityTypeID:  "4", // Product entity (string, not int)
+			IsRequired:           false,
+			Scope:                "global",
+			EntityTypeID:         "4", // Product entity (string, not int)
 		}
 
 		created, err := magento2.CreateAttribute(&attribute, client)
@@ -198,7 +209,7 @@ func TestFunctionalV2_Attributes(t *testing.T) {
 		}
 
 		if retrieved.Attribute.AttributeCode != attributeCode {
-			t.Errorf("Retrieved attribute code mismatch: got %s, want %s", 
+			t.Errorf("Retrieved attribute code mismatch: got %s, want %s",
 				retrieved.Attribute.AttributeCode, attributeCode)
 		}
 	})
@@ -255,8 +266,8 @@ func TestFunctionalV2_Cart(t *testing.T) {
 
 		// Add item to cart
 		item := magento2.CartItem{
-			Sku: sku,
-			Qty: 2,
+			Sku:     sku,
+			Qty:     2,
 			QuoteID: guestCart.QuoteID,
 		}
 
@@ -284,7 +295,7 @@ func TestFunctionalV2_Cart(t *testing.T) {
 				Email:     "test@example.com",
 			},
 		}
-		
+
 		carriers, err := guestCart.EstimateShippingCarrier(shippingAddr)
 		if err != nil {
 			t.Logf("Failed to estimate shipping: %v", err)
@@ -309,10 +320,10 @@ func TestFunctionalV2_Cart(t *testing.T) {
 // Run a quick connectivity test first
 func TestFunctionalV2_QuickTest(t *testing.T) {
 	t.Run("API Connectivity", TestFunctionalV2_APIConnection)
-	
+
 	// If connectivity works, run other tests
 	t.Run("Products", TestFunctionalV2_Products)
-	t.Run("Categories", TestFunctionalV2_Categories) 
+	t.Run("Categories", TestFunctionalV2_Categories)
 	t.Run("Attributes", TestFunctionalV2_Attributes)
 	t.Run("Cart", TestFunctionalV2_Cart)
 }

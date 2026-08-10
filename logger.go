@@ -4,32 +4,29 @@ import (
 	"os"
 
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
-var logger zerolog.Logger
+// logger is the package-level logger used by this library. It defaults to a
+// no-op logger: importing this package never mutates global state (such as
+// the global zerolog logger) and never writes to stderr on its own.
+var logger = zerolog.Nop()
 
-func init() {
-	// Set up default logger with pretty console output
-	output := zerolog.ConsoleWriter{Out: os.Stderr}
-	logger = zerolog.New(output).With().Timestamp().Caller().Logger()
-	
-	// Also set the global logger
-	log.Logger = logger
-}
-
-// SetLogger allows users to set a custom zerolog logger
+// SetZeroLogger allows users to set a custom zerolog logger for this library.
+// It only changes the package-level logger; the global zerolog logger is left
+// untouched.
 func SetZeroLogger(customLogger zerolog.Logger) {
 	logger = customLogger
-	log.Logger = customLogger
 }
 
-// EnableDebugLogging enables debug level logging
+// EnableDebugLogging explicitly installs a debug-level console logger
+// (writing to stderr) as the package-level logger.
 func EnableDebugLogging() {
-	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	output := zerolog.ConsoleWriter{Out: os.Stderr}
+	logger = zerolog.New(output).With().Timestamp().Caller().Logger().Level(zerolog.DebugLevel)
 }
 
-// DisableDebugLogging sets logging back to info level
+// DisableDebugLogging reverts the package-level logger to the default no-op
+// logger.
 func DisableDebugLogging() {
-	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	logger = zerolog.Nop()
 }

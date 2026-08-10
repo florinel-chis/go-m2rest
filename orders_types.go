@@ -336,11 +336,11 @@ type Order struct {
 			Recipient           string  `json:"recipient,omitempty"`
 			Message             string  `json:"message,omitempty"`
 			ExtensionAttributes *struct {
-				EntityID                   string  `json:"entity_id,omitempty"`
-				EntityType                 string  `json:"entity_type,omitempty"`
-				WrappingID                 float64 `json:"wrapping_id,omitempty"`
-				WrappingAllowGiftReceipt   bool    `json:"wrapping_allow_gift_receipt,omitempty"`
-				WrappingAddPrfloat64edCard bool    `json:"wrapping_add_prfloat64ed_card,omitempty"`
+				EntityID                 string  `json:"entity_id,omitempty"`
+				EntityType               string  `json:"entity_type,omitempty"`
+				WrappingID               float64 `json:"wrapping_id,omitempty"`
+				WrappingAllowGiftReceipt bool    `json:"wrapping_allow_gift_receipt,omitempty"`
+				WrappingAddPrintedCard   bool    `json:"wrapping_add_printed_card,omitempty"`
 			} `json:"extension_attributes,omitempty"`
 		} `json:"gift_message,omitempty"`
 		GwID                     string  `json:"gw_id,omitempty"`

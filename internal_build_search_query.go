@@ -3,8 +3,6 @@ package magento2
 import (
 	"fmt"
 	"net/url"
-
-	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -54,7 +52,7 @@ func BuildSearchQuery(field, value, conditionType string) string {
 	params.Add(searchCriteriaConditionType(0, 0), conditionType)
 
 	queryString := params.Encode()
-	log.Debug().
+	logger.Debug().
 		Str("query", queryString).
 		Msg("Built simple search query")
 	return queryString
@@ -99,7 +97,7 @@ func BuildFlexibleSearchQuery(criteria []SearchQueryCriteria, additionalQuery ..
 	}
 
 	queryString := params.Encode()
-	log.Debug().
+	logger.Debug().
 		Str("query", queryString).
 		Interface("criteria", criteria).               // Log criteria for complex queries
 		Interface("additionalQuery", additionalQuery). // Log additional query parameters
