@@ -10,6 +10,7 @@ import (
 )
 
 func setupAdvancedTestClient(t *testing.T) (*magento2.Client, *TestConfig) {
+	skipWithoutMagentoHost(t)
 	client, config, err := SetupTestClient()
 	if err != nil {
 		t.Fatalf("Failed to setup test client: %v", err)
@@ -23,7 +24,7 @@ func TestAdvancedProducts_ConfigurableProduct(t *testing.T) {
 
 	t.Run("Create Configurable Product with Variations", func(t *testing.T) {
 		timestamp := time.Now().Unix()
-		
+
 		// Step 1: Create configurable attributes (color and size)
 		colorAttr := magento2.Attribute{
 			AttributeCode:        fmt.Sprintf("test_color_%d", timestamp),
@@ -42,7 +43,7 @@ func TestAdvancedProducts_ConfigurableProduct(t *testing.T) {
 
 		sizeAttr := magento2.Attribute{
 			AttributeCode:        fmt.Sprintf("test_size_%d", timestamp),
-			FrontendInput:        "select", 
+			FrontendInput:        "select",
 			DefaultFrontendLabel: "Test Size",
 			IsRequired:           false,
 			Scope:                "global",
@@ -66,7 +67,7 @@ func TestAdvancedProducts_ConfigurableProduct(t *testing.T) {
 			Int("id", createdColorAttr.Attribute.AttributeID).
 			Msg("Color attribute created")
 
-		// Create size attribute  
+		// Create size attribute
 		createdSizeAttr, err := magento2.CreateAttribute(&sizeAttr, client)
 		if err != nil {
 			t.Errorf("Failed to create size attribute: %v", err)
@@ -115,10 +116,10 @@ func TestAdvancedProducts_ConfigurableProduct(t *testing.T) {
 		var childProducts []*magento2.MProduct
 		for i, variation := range variations {
 			childSku := fmt.Sprintf("%s-%s-%s", configurableSku, variation.color, variation.size)
-			
+
 			// Use the actual option values from Magento instead of custom values
 			var colorValue, sizeValue string
-			
+
 			// Find the correct option values from the created attributes
 			for _, option := range createdColorAttr.Attribute.Options {
 				if option.Label == variation.color || option.Value == variation.color {
@@ -132,7 +133,7 @@ func TestAdvancedProducts_ConfigurableProduct(t *testing.T) {
 					break
 				}
 			}
-			
+
 			childProduct := magento2.Product{
 				Sku:            childSku,
 				Name:           fmt.Sprintf("%s - %s %s", configurableProduct.Name, variation.color, variation.size),
@@ -459,7 +460,7 @@ func TestAdvancedProducts_AttributeOptions(t *testing.T) {
 // Run all advanced product tests
 func TestAdvancedProducts_All(t *testing.T) {
 	t.Run("ConfigurableProduct", TestAdvancedProducts_ConfigurableProduct)
-	t.Run("BundleProduct", TestAdvancedProducts_BundleProduct) 
+	t.Run("BundleProduct", TestAdvancedProducts_BundleProduct)
 	t.Run("VirtualProduct", TestAdvancedProducts_VirtualProduct)
 	t.Run("GroupedProduct", TestAdvancedProducts_GroupedProduct)
 	t.Run("AttributeOptions", TestAdvancedProducts_AttributeOptions)

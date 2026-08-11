@@ -2,6 +2,7 @@ package magento2
 
 import (
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"strconv"
@@ -142,35 +143,33 @@ func SetupTestClient() (*magento2.Client, *TestConfig, error) {
 func loadDotEnv() {
 	// Try current directory first, then parent directory
 	envPaths := []string{".env", "../.env"}
-	
+
 	var file *os.File
 	var err error
-	
+
 	for _, path := range envPaths {
 		file, err = os.Open(path)
 		if err == nil {
 			break
 		}
 	}
-	
+
 	if err != nil {
 		return // .env file doesn't exist, which is fine
 	}
 	defer file.Close()
 
 	// Simple .env parser
-	buf := make([]byte, 1024)
-	n, err := file.Read(buf)
+	data, err := io.ReadAll(file)
 	if err != nil {
 		return
 	}
 
-	content := string(buf[:n])
-	lines := strings.Split(content, "\n")
+	lines := strings.Split(string(data), "\n")
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		
+
 		// Skip empty lines and comments
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue

@@ -3,8 +3,6 @@ package magento2
 import (
 	"fmt"
 	"strconv"
-
-	"github.com/rs/zerolog/log"
 )
 
 type MAttributeSet struct {
@@ -29,7 +27,7 @@ func CreateAttributeSet(a AttributeSet, skeletonID int, apiClient *Client) (*MAt
 		SkeletonID:   skeletonID,
 	}
 
-	log.Debug().
+	logger().Debug().
 		Interface("payload", payLoad).
 		Int("skeletonID", skeletonID).
 		Str("endpoint", endpoint).
@@ -67,7 +65,7 @@ func GetAttributeSetByName(name string, apiClient *Client) (*MAttributeSet, erro
 
 	response := &attributeSetSearchQueryResponse{}
 
-	log.Debug().
+	logger().Debug().
 		Str("name", name).
 		Str("endpoint", endpoint).
 		Msg("Getting attribute set by name")
@@ -83,7 +81,7 @@ func GetAttributeSetByName(name string, apiClient *Client) (*MAttributeSet, erro
 	}
 
 	if len(response.AttributeSets) == 0 {
-		log.Warn().Str("name", name).Msg("Attribute set not found by name")
+		logger().Warn().Str("name", name).Msg("Attribute set not found by name")
 		return nil, ErrNotFound
 	}
 
@@ -103,18 +101,18 @@ func GetAttributeSetByName(name string, apiClient *Client) (*MAttributeSet, erro
 }
 
 func (mas *MAttributeSet) UpdateAttributeSetOnRemote() error {
-	log.Debug().
+	logger().Debug().
 		Str("route", mas.Route).
 		Interface("attributeSet", mas.AttributeSet).
 		Msg("Updating attribute set on remote")
 
 	resp, err := mas.APIClient.HTTPClient.R().SetResult(mas.AttributeSet).SetBody(mas.AttributeSet).Put(mas.Route)
 	if err != nil {
-		log.Error().Err(err).Msg("Error updating attribute set on remote")
+		logger().Error().Err(err).Msg("Error updating attribute set on remote")
 		return fmt.Errorf("error updating attribute set on remote: %w", err)
 	}
 
-	log.Debug().
+	logger().Debug().
 		Int("status", resp.StatusCode()).
 		Str("body", resp.String()).
 		Msg("Attribute set updated response from remote")
@@ -147,17 +145,17 @@ func (mas *MAttributeSet) UpdateAttributeSetFromRemote() error {
 
 // updateAttributeSetDetails - Renamed to be more specific about what is being updated (details)
 func (mas *MAttributeSet) updateAttributeSetDetails() error {
-	log.Debug().
+	logger().Debug().
 		Str("route", mas.Route).
 		Msg("Updating attribute set details from remote")
 
 	resp, err := mas.APIClient.HTTPClient.R().SetResult(mas.AttributeSet).Get(mas.Route)
 	if err != nil {
-		log.Error().Err(err).Msg("Error updating attribute set details from remote")
+		logger().Error().Err(err).Msg("Error updating attribute set details from remote")
 		return fmt.Errorf("error getting attribute set details from remote: %w", err)
 	}
 
-	log.Debug().
+	logger().Debug().
 		Int("status", resp.StatusCode()).
 		Str("body", resp.String()).
 		Msg("Attribute set details updated response from remote")
@@ -171,17 +169,17 @@ func (mas *MAttributeSet) updateAttributeSetDetails() error {
 
 func (mas *MAttributeSet) updateAttributes() error {
 	attributesRoute := mas.Route + "/" + productsAttributeSetAttributesRelative
-	log.Debug().
+	logger().Debug().
 		Str("route", attributesRoute).
 		Msg("Updating attribute set attributes from remote")
 
 	resp, err := mas.APIClient.HTTPClient.R().SetResult(mas.AttributeSetAttributes).Get(attributesRoute)
 	if err != nil {
-		log.Error().Err(err).Msg("Error updating attribute set attributes from remote")
+		logger().Error().Err(err).Msg("Error updating attribute set attributes from remote")
 		return fmt.Errorf("error getting attribute set attributes from remote: %w", err)
 	}
 
-	log.Debug().
+	logger().Debug().
 		Int("status", resp.StatusCode()).
 		Str("body", resp.String()).
 		Msg("Attribute set attributes updated response from remote")
@@ -199,13 +197,13 @@ func (mas *MAttributeSet) updateGroups() error {
 
 	response := &groupSearchQueryResponse{}
 
-	log.Debug().
+	logger().Debug().
 		Str("endpoint", endpoint).
 		Msg("Updating attribute set groups from remote")
 
 	resp, err := mas.APIClient.HTTPClient.R().SetResult(response).Get(endpoint)
 	if err != nil {
-		log.Error().Err(err).Msg("Error updating attribute set groups from remote")
+		logger().Error().Err(err).Msg("Error updating attribute set groups from remote")
 		return fmt.Errorf("error getting attribute set groups from remote: %w", err)
 	}
 
@@ -215,7 +213,7 @@ func (mas *MAttributeSet) updateGroups() error {
 	}
 
 	mas.AttributeSetGroups = response.Groups
-	log.Debug().Interface("groups", mas.AttributeSetGroups).Msg("Attribute set groups updated successfully")
+	logger().Debug().Interface("groups", mas.AttributeSetGroups).Msg("Attribute set groups updated successfully")
 
 	return nil
 }
@@ -231,7 +229,7 @@ func (mas *MAttributeSet) AssignAttribute(attributeGroupID, sortOrder int, attri
 		SortOrder:           sortOrder,
 	}
 
-	log.Debug().
+	logger().Debug().
 		Str("attributeCode", attributeCode).
 		Int("attributeSetID", mas.AttributeSet.AttributeSetID).
 		Int("groupID", attributeGroupID).
@@ -242,7 +240,7 @@ func (mas *MAttributeSet) AssignAttribute(attributeGroupID, sortOrder int, attri
 
 	resp, err := httpClient.R().SetBody(payLoad).Post(endpoint)
 	if err != nil {
-		log.Error().Err(err).Msg("Error assigning attribute to attribute set")
+		logger().Error().Err(err).Msg("Error assigning attribute to attribute set")
 		return fmt.Errorf("error assigning attribute to attribute set: %w", err)
 	}
 
@@ -251,7 +249,7 @@ func (mas *MAttributeSet) AssignAttribute(attributeGroupID, sortOrder int, attri
 		return httpErr
 	}
 
-	log.Debug().Msg("Attribute assigned successfully, updating attribute set from remote")
+	logger().Debug().Msg("Attribute assigned successfully, updating attribute set from remote")
 	err = mas.UpdateAttributeSetFromRemote()
 	if err != nil {
 		return fmt.Errorf("error updating attribute set from remote after assigning attribute: %w", err)
@@ -270,7 +268,7 @@ func (mas *MAttributeSet) CreateGroup(groupName string) error {
 		},
 	}
 
-	log.Debug().
+	logger().Debug().
 		Str("groupName", groupName).
 		Int("attributeSetID", mas.AttributeSet.AttributeSetID).
 		Str("endpoint", endpoint).
@@ -279,7 +277,7 @@ func (mas *MAttributeSet) CreateGroup(groupName string) error {
 
 	resp, err := httpClient.R().SetBody(payLoad).Post(endpoint)
 	if err != nil {
-		log.Error().Err(err).Msg("Error creating attribute group for attribute set")
+		logger().Error().Err(err).Msg("Error creating attribute group for attribute set")
 		return fmt.Errorf("error creating group on attribute-set: %w", err)
 	}
 
@@ -288,7 +286,7 @@ func (mas *MAttributeSet) CreateGroup(groupName string) error {
 		return httpErr
 	}
 
-	log.Debug().Msg("Attribute group created successfully, updating attribute set from remote")
+	logger().Debug().Msg("Attribute group created successfully, updating attribute set from remote")
 	err = mas.UpdateAttributeSetFromRemote()
 	if err != nil {
 		return fmt.Errorf("error updating attribute set from remote after creating group: %w", err)
@@ -306,7 +304,7 @@ func (mas *MAttributeSet) CreateGroup(groupName string) error {
 /*
 func mayReturnErrorForHTTPResponse(resp *resty.Response, operation string) error {
 	if resp.IsError() {
-		log.Error().
+		logger().Error().
 			Int("status_code", resp.StatusCode()).
 			Str("operation", operation).
 			Str("body", resp.String()).

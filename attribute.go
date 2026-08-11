@@ -3,8 +3,6 @@ package magento2
 import (
 	"fmt"
 	"strings"
-
-	"github.com/rs/zerolog/log"
 )
 
 type MAttribute struct {
@@ -25,7 +23,7 @@ func CreateAttribute(a *Attribute, apiClient *Client) (*MAttribute, error) {
 		Attribute: *a,
 	}
 
-	log.Debug().
+	logger().Debug().
 		Interface("payload", payLoad).
 		Str("endpoint", endpoint).
 		Msg("Creating attribute")
@@ -34,11 +32,11 @@ func CreateAttribute(a *Attribute, apiClient *Client) (*MAttribute, error) {
 	mAttribute.Route = productsAttribute + "/" + mAttribute.Attribute.AttributeCode
 
 	if err != nil {
-		log.Error().Err(err).Msg("Error creating attribute")
+		logger().Error().Err(err).Msg("Error creating attribute")
 		return mAttribute, fmt.Errorf("error creating attribute: %w", err)
 	}
 
-	log.Debug().
+	logger().Debug().
 		Int("status", resp.StatusCode()).
 		Str("body", resp.String()).
 		Msg("Attribute creation response from remote")
@@ -58,7 +56,7 @@ func GetAttributeByAttributeCode(attributeCode string, apiClient *Client) (*MAtt
 		APIClient: apiClient,
 	}
 
-	log.Debug().
+	logger().Debug().
 		Str("attributeCode", attributeCode).
 		Str("route", mAttributeSet.Route). // Added route to debug log
 		Msg("Getting attribute by attribute code")
@@ -72,18 +70,18 @@ func GetAttributeByAttributeCode(attributeCode string, apiClient *Client) (*MAtt
 }
 
 func (mas *MAttribute) UpdateAttributeOnRemote() error {
-	log.Debug().
+	logger().Debug().
 		Str("route", mas.Route).
 		Interface("attribute", mas.Attribute).
 		Msg("Updating attribute on remote")
 
 	resp, err := mas.APIClient.HTTPClient.R().SetResult(mas.Attribute).SetBody(mas.Attribute).Put(mas.Route)
 	if err != nil {
-		log.Error().Err(err).Msg("Error updating attribute on remote")
+		logger().Error().Err(err).Msg("Error updating attribute on remote")
 		return fmt.Errorf("error updating attribute on remote: %w", err)
 	}
 
-	log.Debug().
+	logger().Debug().
 		Int("status", resp.StatusCode()).
 		Str("body", resp.String()).
 		Msg("Attribute update response from remote")
@@ -96,17 +94,17 @@ func (mas *MAttribute) UpdateAttributeOnRemote() error {
 }
 
 func (mas *MAttribute) UpdateAttributeFromRemote() error {
-	log.Debug().
+	logger().Debug().
 		Str("route", mas.Route).
 		Msg("Updating attribute from remote")
 
 	resp, err := mas.APIClient.HTTPClient.R().SetResult(mas.Attribute).Get(mas.Route)
 	if err != nil {
-		log.Error().Err(err).Msg("Error updating attribute from remote")
+		logger().Error().Err(err).Msg("Error updating attribute from remote")
 		return fmt.Errorf("error updating attribute from remote: %w", err)
 	}
 
-	log.Debug().
+	logger().Debug().
 		Int("status", resp.StatusCode()).
 		Str("body", resp.String()).
 		Msg("Attribute update from remote response")
@@ -126,7 +124,7 @@ func (mas *MAttribute) AddOption(option Option) (string, error) {
 		Option: option,
 	}
 
-	log.Debug().
+	logger().Debug().
 		Str("endpoint", endpoint).
 		Interface("payload", payLoad).
 		Interface("option", option). // Added logging for the option itself
@@ -134,7 +132,7 @@ func (mas *MAttribute) AddOption(option Option) (string, error) {
 
 	resp, err := httpClient.R().SetBody(payLoad).Post(endpoint)
 	if err != nil {
-		log.Error().Err(err).Msg("Error adding option to attribute")
+		logger().Error().Err(err).Msg("Error adding option to attribute")
 		return "", fmt.Errorf("error assigning option to attribute: %w", err)
 	}
 
@@ -146,13 +144,13 @@ func (mas *MAttribute) AddOption(option Option) (string, error) {
 	optionValue := mayTrimSurroundingQuotes(resp.String())
 	optionValue = strings.TrimPrefix(optionValue, "id_")
 
-	log.Debug().
+	logger().Debug().
 		Str("optionValue", optionValue).
 		Msg("Option added successfully, updating attribute from remote")
 
 	err = mas.UpdateAttributeFromRemote()
 	if err != nil {
-		log.Error().Err(err).Msg("Error updating attribute from remote after adding option")
+		logger().Error().Err(err).Msg("Error updating attribute from remote after adding option")
 		return "", fmt.Errorf("error updating attribute from remote after adding option: %w", err)
 	}
 

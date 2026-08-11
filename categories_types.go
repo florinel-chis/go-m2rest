@@ -13,14 +13,14 @@ type Category struct {
 	Path                string             `json:"path,omitempty"`
 	AvailableSortBy     []string           `json:"available_sort_by,omitempty"`
 	IncludeInMenu       bool               `json:"include_in_menu,omitempty"`
-	ExtensionAttributes any        `json:"extension_attributes,omitempty"`
+	ExtensionAttributes any                `json:"extension_attributes,omitempty"`
 	CustomAttributes    []CustomAttributes `json:"custom_attributes,omitempty"`
 }
 
 type ProductLink struct {
-	Sku                 string                 `json:"sku"`
-	Position            int                    `json:"position"`
-	CategoryID          string                 `json:"category_id"`
+	Sku                 string         `json:"sku"`
+	Position            int            `json:"position"`
+	CategoryID          string         `json:"category_id"`
 	ExtensionAttributes map[string]any `json:"extension_attributes,omitempty"`
 }
 

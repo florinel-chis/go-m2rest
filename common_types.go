@@ -1,27 +1,27 @@
 package magento2
 
 type Address struct {
-	ID                  int                      `json:"id,omitempty"`
-	RegionID            int                      `json:"region_id,omitempty"`
-	RegionCode          string                   `json:"region_code,omitempty"`
-	CountryID           string                   `json:"country_id"`
-	Street              []string                 `json:"street"`
-	Company             string                   `json:"company,omitempty"`
-	Telephone           string                   `json:"telephone"`
-	Fax                 string                   `json:"fax,omitempty"`
-	Postcode            string                   `json:"postcode"`
-	City                string                   `json:"city"`
-	Firstname           string                   `json:"firstname"`
-	Lastname            string                   `json:"lastname"`
-	Middlename          string                   `json:"middlename,omitempty"`
-	Prefix              string                   `json:"prefix,omitempty"`
-	Suffix              string                   `json:"suffix,omitempty"`
-	VatID               string                   `json:"vat_id,omitempty"`
-	CustomerID          int                      `json:"customer_id,omitempty"`
-	Email               string                   `json:"email"`
-	SameAsBilling       int                      `json:"same_as_billing,omitempty"`
-	CustomerAddressID   int                      `json:"customer_address_id,omitempty"`
-	SaveInAddressBook   int                      `json:"save_in_address_book,omitempty"`
+	ID                  int              `json:"id,omitempty"`
+	RegionID            int              `json:"region_id,omitempty"`
+	RegionCode          string           `json:"region_code,omitempty"`
+	CountryID           string           `json:"country_id"`
+	Street              []string         `json:"street"`
+	Company             string           `json:"company,omitempty"`
+	Telephone           string           `json:"telephone"`
+	Fax                 string           `json:"fax,omitempty"`
+	Postcode            string           `json:"postcode"`
+	City                string           `json:"city"`
+	Firstname           string           `json:"firstname"`
+	Lastname            string           `json:"lastname"`
+	Middlename          string           `json:"middlename,omitempty"`
+	Prefix              string           `json:"prefix,omitempty"`
+	Suffix              string           `json:"suffix,omitempty"`
+	VatID               string           `json:"vat_id,omitempty"`
+	CustomerID          int              `json:"customer_id,omitempty"`
+	Email               string           `json:"email"`
+	SameAsBilling       int              `json:"same_as_billing,omitempty"`
+	CustomerAddressID   int              `json:"customer_address_id,omitempty"`
+	SaveInAddressBook   int              `json:"save_in_address_book,omitempty"`
 	ExtensionAttributes map[string]any   `json:"extension_attributes,omitempty"`
 	CustomAttributes    []map[string]any `json:"custom_attributes,omitempty"`
 }
@@ -146,11 +146,11 @@ type Item struct {
 			Recipient           string  `json:"recipient,omitempty"`
 			Message             string  `json:"message,omitempty"`
 			ExtensionAttributes *struct {
-				EntityID                   string  `json:"entity_id,omitempty"`
-				EntityType                 string  `json:"entity_type,omitempty"`
-				WrappingID                 float64 `json:"wrapping_id,omitempty"`
-				WrappingAllowGiftReceipt   bool    `json:"wrapping_allow_gift_receipt,omitempty"`
-				WrappingAddPrfloat64edCard bool    `json:"wrapping_add_prfloat64ed_card,omitempty"`
+				EntityID                 string  `json:"entity_id,omitempty"`
+				EntityType               string  `json:"entity_type,omitempty"`
+				WrappingID               float64 `json:"wrapping_id,omitempty"`
+				WrappingAllowGiftReceipt bool    `json:"wrapping_allow_gift_receipt,omitempty"`
+				WrappingAddPrintedCard   bool    `json:"wrapping_add_printed_card,omitempty"`
 			} `json:"extension_attributes,omitempty"`
 		} `json:"gift_message,omitempty"`
 		GwID                    string   `json:"gw_id,omitempty"`
