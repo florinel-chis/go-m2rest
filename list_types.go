@@ -36,6 +36,9 @@ type ListOptions struct {
 }
 
 // Encode renders the options as a URL query string (without leading "?").
+// It is kept for the Get*Page/Iterate* helpers; new code should build the
+// query with NewSearchCriteria (AND/OR groups, several sorts, field
+// allowlist, page clamping) and pass it as Request.Query.
 func (o ListOptions) Encode() string {
 	params := url.Values{}
 

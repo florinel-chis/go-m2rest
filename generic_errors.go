@@ -1,7 +1,6 @@
 package magento2
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -37,8 +36,9 @@ type APIError struct {
 	// (Request.MaxBodyBytes, else WithMaxBodyBytes) or 64 KiB, whichever is
 	// smaller; 64 KiB when the cap is unlimited.
 	Body []byte
-	// Message is Magento's error message, or the HTTP status text when the
-	// body is not a Magento error document.
+	// Message is the error document's message with its parameters
+	// substituted (see ErrorDocument.Substituted), or the HTTP status text
+	// when the body is not a Magento error document.
 	Message string
 	// Parameters is the error document's raw "parameters" (an object of
 	// named or an array of positional placeholders), nil when absent.
@@ -63,12 +63,6 @@ func (e *APIError) Error() string {
 
 func (e *APIError) Unwrap() error {
 	return e.sentinel
-}
-
-// errorDocument is the wire shape of a Magento REST error.
-type errorDocument struct {
-	Message    string          `json:"message"`
-	Parameters json.RawMessage `json:"parameters"`
 }
 
 func (c *Client) newAPIError(method, path string, resp *http.Response, body []byte) *APIError {
@@ -96,14 +90,13 @@ func (c *Client) newAPIError(method, path string, resp *http.Response, body []by
 			e.Header[k] = rv
 		}
 	}
-	var doc errorDocument
-	trimmed := bytes.TrimSpace(bytes.TrimPrefix(body, []byte("\xef\xbb\xbf")))
-	if json.Unmarshal(trimmed, &doc) == nil && doc.Message != "" {
-		e.Message = c.redact(doc.Message)
-		if len(doc.Parameters) > 0 && !bytes.Equal(doc.Parameters, []byte("null")) {
+	if doc, ok := ParseErrorDocument(body); ok {
+		e.Message = doc.Substituted(c.redact)
+		if len(doc.Parameters) > 0 {
 			e.Parameters = json.RawMessage(c.redact(string(doc.Parameters)))
 		}
+	} else {
+		e.Message = c.redact(e.Message)
 	}
-	e.Message = c.redact(e.Message)
 	return e
 }

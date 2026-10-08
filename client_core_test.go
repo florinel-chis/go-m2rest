@@ -665,8 +665,8 @@ func TestAPIErrorShape(t *testing.T) {
 			wantError: "magento2: GET /V1/orders: status 502: Bad Gateway", wantIs: ErrBadRequest, wantMsg: "Bad Gateway",
 		},
 		{
-			name: "parameters kept raw", status: 400, body: `{"message":"%1","parameters":["x"]}`,
-			wantError: "magento2: GET /V1/orders: status 400: %1", wantIs: ErrBadRequest, wantMsg: "%1", wantParams: `["x"]`,
+			name: "parameters substituted and kept raw", status: 400, body: `{"message":"%1","parameters":["x"]}`,
+			wantError: "magento2: GET /V1/orders: status 400: x", wantIs: ErrBadRequest, wantMsg: "x", wantParams: `["x"]`,
 		},
 	}
 	for _, tt := range tests {
