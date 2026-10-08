@@ -18,7 +18,7 @@ Requires Go 1.27+ (`go 1.27.0`, `toolchain go1.27.1` in go.mod).
 - Errors are wrapped with `%w`; non-2xx answers are `*APIError` (`errors.As`), and
   `errors.Is(err, ErrNotFound / ErrBadRequest)` keeps working.
 - No package-level mutable state (no global logger, no global client). Configuration lives on
-  the `Client` via `Option`s.
+  the `Client` via `ClientOption`s (`With*`; the name `Option` is the attribute option type).
 - No `panic` in library code.
 - Never log a request or response body, a header or a query string — at any level. Every
   string that enters a log record or an error passes the embedder's redactor.

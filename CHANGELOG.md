@@ -109,6 +109,10 @@ non-standard-library dependency.
 
 ### Changed
 
+- Store-code rule: with no store code (neither `WithStoreCode` nor `Request.StoreCode`) requests go
+  to `/rest/V1/...`, which Magento serves from the default store view whatever its code; a code
+  scopes them to `/rest/<code>/V1/...`. Previously `/rest/{code}/V1` was always inserted and an
+  empty `StoreConfig.StoreCode` produced `/rest//V1`.
 - Retries keep the previous policy (idempotent methods, 429/500/502/503/504 and transport
   errors, `Retry-After`) and are now implemented over `net/http`; `WithRetryPolicy(0, …)` means
   exactly one attempt.

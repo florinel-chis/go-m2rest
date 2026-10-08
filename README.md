@@ -38,6 +38,9 @@ live store's schema.
 2. **Magento 2 / Adobe Commerce** with the REST API enabled
 3. **A token** - integration (bearer) token, or admin/customer credentials
 
+Requests go to `/rest/V1/...` (the default store view) unless `WithStoreCode` or
+`Request.StoreCode` scopes them to `/rest/<code>/V1/...`.
+
 ### Installation
 
 ```bash
@@ -59,6 +62,8 @@ import (
 
 func main() {
     // The store root (an optional path prefix is fine); the client appends /rest.
+    // No store code: requests go to /rest/V1/... (default store view); add
+    // magento2.WithStoreCode("de") or Request.StoreCode to scope them.
     client, err := magento2.New("https://shop.example",
         magento2.WithToken("integration-token"),
         magento2.WithUserAgent("my-sync/1.0"),
