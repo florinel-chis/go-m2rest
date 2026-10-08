@@ -162,6 +162,7 @@ var out OrderPage
 err = client.DoJSON(ctx, req, &out) // refuses a truncated body with ErrBodyTruncated
 ```
 
+A supplied client gets **no default timeout**: set its `Timeout` (or use context deadlines).
 `WithTimeout` and `WithFollowRedirects` configure the client go-m2rest builds itself (default:
 30s per attempt, redirects followed, a clone of `http.DefaultTransport` — which keeps
 `ProxyFromEnvironment`) and are refused together with `WithHTTPClient`.

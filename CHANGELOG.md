@@ -26,8 +26,13 @@ non-standard-library dependency.
   api.SetTimeout(hc.Timeout)
 
   // after
+  hc.Timeout = 30 * time.Second // a supplied client gets NO default timeout: set it yourself
   api, _ := m2.NewAPIClientFromIntegration(sc, token, m2.WithHTTPClient(hc))
   ```
+  **A supplied `*http.Client` gets no default timeout.** The 30s `DefaultTimeout` applies only to
+  the client go-m2rest builds itself; `WithTimeout` and `SetTimeout` do not touch a supplied
+  client. Set `Timeout` on it (or bound every call with a context deadline) — before v0.2.0 resty
+  applied its own 30s timeout around a supplied transport, so dropping this silently removes it.
   Raw calls through `Client.HTTPClient.R()` become `client.Do` / `client.DoJSON`:
   ```go
   // before
