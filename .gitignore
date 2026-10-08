@@ -79,6 +79,7 @@ doc/swagger.schema
 !CHANGELOG.md
 !scripts/README.md
 !CLAUDE.md
+!docs/ARCHITECTURE.md
 !DRIFT.md
 
 # Temporary files
