@@ -64,6 +64,20 @@ non-standard-library dependency.
   ```
 - **Empty store code sends no store segment.** `StoreConfig{StoreCode: ""}` used to request
   `/rest//V1/...`; it now requests `/rest/V1/...` (the default store view).
+- **Address and option types match the Magento interface of each context** (one Go type used to
+  stand in for several, so fields were silently dropped or never matched):
+  - `Order.BillingAddress` is `*OrderAddress` (was `*BillingAddress`, a quote address) —
+    migrate: `&magento2.OrderAddress{...}`; flat field access (`.Firstname`, `.Street`, ...)
+    keeps compiling, `.Address.X` becomes `.X`, `ParentID`/`VatIsValid` are now `int`.
+  - The shipping-assignment address (`Order.ExtensionAttributes.ShippingAssignments[i].Shipping.Address`)
+    is `*OrderAddress` (was `*ShippingAddress`) — same migration.
+  - `Customer.Addresses` is `[]CustomerAddress` (was `[]Address`, a quote address) — migrate:
+    `magento2.CustomerAddress{...}`; `Region` is now a `*Region` object and
+    `DefaultBilling`/`DefaultShipping` are `bool`, as Magento sends them.
+  - `MConfigurableProduct.Options` is `*[]ConfigurableProductOption` (was `*[]Option`, the
+    attribute option type) — migrate: range over `ConfigurableProductOption` (`AttributeID`,
+    `Label`, `Values[i].ValueIndex`).
+  `BillingAddress`, `ShippingAddress` and `Address` stay the quote (cart) address types.
 - **Tag fixes in existing types.** `Options.IsRequired` decodes Magento's `is_require` (it never
   matched before); the Order extension fields mangled to `CollectionPofloat64`,
   `CollectionPofloat64ID` and `RewardPofloat64sBalance` are now `CollectionPoint`,
@@ -87,6 +101,7 @@ non-standard-library dependency.
   `GetCustomer`, MSI `GetSourceItemsPage` / `GetSourcesPage` / `GetStocksPage` (+ `Iterate*`) and
   `GetSalableQuantity`, `GetStockItem`, `GetLowStockItems`, `GetStoreConfigs`,
   `GetStoreGroups`, `GetCartsPage` / `IterateCarts`, `GetSchema`.
+- `OrderAddress` (`OrderAddressInterface`) and `CustomerAddress` (customer `AddressInterface`).
 - `Routes()` — the registry of every route the package calls, with the Go type each response
   decodes into.
 - `cmd/m2drift` — compares `Routes()` and the registered types with a store's

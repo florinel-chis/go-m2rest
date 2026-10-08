@@ -56,10 +56,10 @@ var routes = []Route{
 	{Method: "GET", Template: routeLowStockItems, Type: &StockItemListResponse{}},              // :22 GetLowStockItems
 
 	// module-configurable-product/etc/webapi.xml
-	{Method: "POST", Template: "/V1/configurable-products/{sku}/options", Type: new(int)},       // :46 SetOptionForExistingConfigurableProduct
-	{Method: "GET", Template: "/V1/configurable-products/{sku}/options/all", Type: &[]Option{}}, // :40 MConfigurableProduct.UpdateOptionsFromRemote
-	{Method: "PUT", Template: "/V1/configurable-products/{sku}/options/{id}", Type: new(int)},   // :52 MConfigurableProduct.UpdateOptionByID
-	{Method: "POST", Template: "/V1/configurable-products/{sku}/child", Type: new(bool)},        // :28 MConfigurableProduct.AddChildBySKU
+	{Method: "POST", Template: "/V1/configurable-products/{sku}/options", Type: new(int)},                                                                                    // :46 SetOptionForExistingConfigurableProduct
+	{Method: "GET", Template: "/V1/configurable-products/{sku}/options/all", Type: &[]ConfigurableProductOption{}, Definition: "configurable-product-data-option-interface"}, // :40 MConfigurableProduct.UpdateOptionsFromRemote
+	{Method: "PUT", Template: "/V1/configurable-products/{sku}/options/{id}", Type: new(int)},                                                                                // :52 MConfigurableProduct.UpdateOptionByID
+	{Method: "POST", Template: "/V1/configurable-products/{sku}/child", Type: new(bool)},                                                                                     // :28 MConfigurableProduct.AddChildBySKU
 
 	// module-quote/etc/webapi.xml (cart routes; see GetCartsPage on per-cart GETs)
 	{Method: "GET", Template: routeCartsSearch, Type: &CartListResponse{}},                               // :19 GetCartsPage, IterateCarts
@@ -83,20 +83,20 @@ var routes = []Route{
 	{Method: "POST", Template: "/V1/carts/mine/shipping-information", Type: nil},           // :20 MCart.AddShippingInformation
 
 	// module-sales/etc/webapi.xml
-	{Method: "GET", Template: routeOrders, Type: &OrderListResponse{}},             // :16 GetOrdersPage, IterateOrders, GetOrderByIncrementID
-	{Method: "GET", Template: routeOrder, Type: &Order{}},                          // :10 GetOrder, MOrder.UpdateFromRemote
-	{Method: "POST", Template: routeOrders, Type: &Order{}},                        // :256 MOrder.UpdateEntity
-	{Method: "POST", Template: "/V1/orders/{id}/comments", Type: &StatusHistory{}}, // :52 MOrder.AddComment
-	{Method: "GET", Template: routeInvoices, Type: &InvoiceListResponse{}},         // :94 GetInvoicesPage, IterateInvoices
-	{Method: "GET", Template: routeInvoice, Type: &Invoice{}},                      // :88 GetInvoice
-	{Method: "GET", Template: routeCreditMemos, Type: &CreditMemoListResponse{}},   // :148 GetCreditMemosPage, IterateCreditMemos
-	{Method: "GET", Template: routeCreditMemo, Type: &CreditMemo{}},                // :154 GetCreditMemo
-	{Method: "GET", Template: routeShipments, Type: &ShipmentListResponse{}},       // :202 GetShipmentsPage, IterateShipments
-	{Method: "GET", Template: routeShipment, Type: &Shipment{}},                    // :196 GetShipment
+	{Method: "GET", Template: routeOrders, Type: &OrderListResponse{}},                              // :16 GetOrdersPage, IterateOrders, GetOrderByIncrementID
+	{Method: "GET", Template: routeOrder, Type: &Order{}, Definition: "sales-data-order-interface"}, // :10 GetOrder, MOrder.UpdateFromRemote
+	{Method: "POST", Template: routeOrders, Type: &Order{}},                                         // :256 MOrder.UpdateEntity
+	{Method: "POST", Template: "/V1/orders/{id}/comments", Type: &StatusHistory{}},                  // :52 MOrder.AddComment
+	{Method: "GET", Template: routeInvoices, Type: &InvoiceListResponse{}},                          // :94 GetInvoicesPage, IterateInvoices
+	{Method: "GET", Template: routeInvoice, Type: &Invoice{}},                                       // :88 GetInvoice
+	{Method: "GET", Template: routeCreditMemos, Type: &CreditMemoListResponse{}},                    // :148 GetCreditMemosPage, IterateCreditMemos
+	{Method: "GET", Template: routeCreditMemo, Type: &CreditMemo{}},                                 // :154 GetCreditMemo
+	{Method: "GET", Template: routeShipments, Type: &ShipmentListResponse{}},                        // :202 GetShipmentsPage, IterateShipments
+	{Method: "GET", Template: routeShipment, Type: &Shipment{}},                                     // :196 GetShipment
 
 	// module-customer/etc/webapi.xml
-	{Method: "GET", Template: routeCustomersSearch, Type: &CustomerListResponse{}}, // :167 GetCustomersPage, IterateCustomers
-	{Method: "GET", Template: routeCustomer, Type: &Customer{}},                    // :119 GetCustomer
+	{Method: "GET", Template: routeCustomersSearch, Type: &CustomerListResponse{}},                              // :167 GetCustomersPage, IterateCustomers
+	{Method: "GET", Template: routeCustomer, Type: &Customer{}, Definition: "customer-data-customer-interface"}, // :119 GetCustomer
 
 	// module-inventory-api/etc/webapi.xml, module-inventory-sales-api/etc/webapi.xml
 	{Method: "GET", Template: routeSourceItems, Type: &SourceItemListResponse{}}, // inventory-api :92 GetSourceItemsPage, IterateSourceItems

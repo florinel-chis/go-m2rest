@@ -1,36 +1,18 @@
 # go-m2rest drift report
 
-- Date: 2026-10-08 07:06 UTC
+- Date: 2026-10-08 07:39 UTC
 - Store: http://127.0.0.1:8084
 - Schema: Magento Community, info.version 2.4, 147 paths
 - Magento (vendor composer.json): magento/magento2-base 2.4.8
 - Vendor tree: /Users/flo/fch/magento248/vendor
-- go-m2rest commit: 6bdc71e36934, 69 registered routes
+- go-m2rest commit: f5a941c32100-dirty, 69 registered routes
 - Token scope: /rest/all/schema lists only the routes the token may call; a route missing from it is DRIFT unless an etc/webapi.xml in the vendor tree declares it (then INFO).
 
-**Summary: 17 DRIFT, 141 INFO**
+**Summary: 0 DRIFT, 138 INFO**
 
 ## DRIFT
 
-| Route | Subject | Finding |
-|---|---|---|
-| `GET /V1/carts/search` | `Address.customer_address_id` | json tag not in customer-data-address-interface |
-| `GET /V1/carts/search` | `Address.email` | json tag not in customer-data-address-interface |
-| `GET /V1/carts/search` | `Address.region_code` | json tag not in customer-data-address-interface |
-| `GET /V1/carts/search` | `Address.same_as_billing` | json tag not in customer-data-address-interface |
-| `GET /V1/carts/search` | `Address.save_in_address_book` | json tag not in customer-data-address-interface |
-| `GET /V1/configurable-products/{sku}/options/all` | `Option.is_default` | json tag not in configurable-product-data-option-interface |
-| `GET /V1/configurable-products/{sku}/options/all` | `Option.sort_order` | json tag not in configurable-product-data-option-interface |
-| `GET /V1/configurable-products/{sku}/options/all` | `Option.store_labels` | json tag not in configurable-product-data-option-interface |
-| `GET /V1/configurable-products/{sku}/options/all` | `Option.value` | json tag not in configurable-product-data-option-interface |
-| `GET /V1/orders` | `BillingAddress.custom_attributes` | json tag not in sales-data-order-address-interface |
-| `GET /V1/orders` | `BillingAddress.id` | json tag not in sales-data-order-address-interface |
-| `GET /V1/orders` | `BillingAddress.same_as_billing` | json tag not in sales-data-order-address-interface |
-| `GET /V1/orders` | `BillingAddress.save_in_address_book` | json tag not in sales-data-order-address-interface |
-| `GET /V1/orders` | `ShippingAddress.custom_attributes` | json tag not in sales-data-order-address-interface |
-| `GET /V1/orders` | `ShippingAddress.id` | json tag not in sales-data-order-address-interface |
-| `GET /V1/orders` | `ShippingAddress.same_as_billing` | json tag not in sales-data-order-address-interface |
-| `GET /V1/orders` | `ShippingAddress.save_in_address_book` | json tag not in sales-data-order-address-interface |
+None.
 
 ## INFO
 
@@ -39,13 +21,11 @@
 | `DELETE /V1/carts/mine/items/{itemId}` | `DELETE /V1/carts/mine/items/{itemId}` | not in the schema (hidden by token scope); declared in magento/module-quote/etc/webapi.xml |
 | `GET /V1/carts/mine` | `GET /V1/carts/mine` | not in the schema (hidden by token scope); declared in magento/module-quote/etc/webapi.xml |
 | `GET /V1/carts/mine/payment-methods` | `GET /V1/carts/mine/payment-methods` | not in the schema (hidden by token scope); declared in magento/module-quote/etc/webapi.xml |
-| `GET /V1/carts/search` | `Address` | 3 schema properties of customer-data-address-interface not in the type: default_billing, default_shipping, region |
 | `GET /V1/carts/search` | `BillingAddress` | 1 schema properties of quote-data-address-interface not in the type: region |
 | `GET /V1/carts/search` | `CartListResponse` | 1 schema properties of quote-data-cart-search-results-interface not in the type: search_criteria |
 | `GET /V1/categories` | `CategoryTreeNode` | 1 schema properties of catalog-data-category-tree-interface not in the type: position |
 | `GET /V1/categories/list` | `categorySearchQueryResponse` | 1 schema properties of catalog-data-category-search-results-interface not in the type: total_count |
 | `GET /V1/categories/list` | `categorySearchQueryResponse.search_criteria` | 3 schema properties of framework-search-criteria-interface not in the type: current_page, page_size, sort_orders |
-| `GET /V1/configurable-products/{sku}/options/all` | `Option` | 7 schema properties of configurable-product-data-option-interface not in the type: attribute_id, extension_attributes, id, is_use_default, position, product_id, values |
 | `GET /V1/creditmemos` | `CreditMemoListResponse` | 1 schema properties of sales-data-creditmemo-search-result-interface not in the type: search_criteria |
 | `GET /V1/customers/search` | `CustomerListResponse` | 1 schema properties of customer-data-customer-search-results-interface not in the type: search_criteria |
 | `GET /V1/inventory/get-product-salable-quantity/{sku}/{stockId}` | `GET /V1/inventory/get-product-salable-quantity/{sku}/{stockId}` | not in the schema (hidden by token scope); declared in magento/module-inventory-sales-api/etc/webapi.xml |
@@ -53,7 +33,6 @@
 | `GET /V1/inventory/sources` | `SourceListResponse` | 1 schema properties of inventory-api-data-source-search-results-interface not in the type: search_criteria |
 | `GET /V1/inventory/stocks` | `StockListResponse` | 1 schema properties of inventory-api-data-stock-search-results-interface not in the type: search_criteria |
 | `GET /V1/invoices` | `InvoiceListResponse` | 1 schema properties of sales-data-invoice-search-result-interface not in the type: search_criteria |
-| `GET /V1/orders` | `BillingAddress` | 8 schema properties of sales-data-order-address-interface not in the type: address_type, entity_id, parent_id, region, vat_is_valid, vat_request_date, vat_request_id, vat_request_success |
 | `GET /V1/orders` | `Item.extension_attributes` | 1 schema properties of sales-data-order-item-extension-interface not in the type: itemized_taxes |
 | `GET /V1/orders` | `Item.extension_attributes.gift_message.extension_attributes.wrapping_add_printed_card` | extension attribute not in gift-message-data-message-extension-interface (its module is not installed on this store, or the token cannot see it) |
 | `GET /V1/orders` | `Item.extension_attributes.gift_message.extension_attributes.wrapping_allow_gift_receipt` | extension attribute not in gift-message-data-message-extension-interface (its module is not installed on this store, or the token cannot see it) |
