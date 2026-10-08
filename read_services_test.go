@@ -148,7 +148,9 @@ func TestReadServices(t *testing.T) {
 		},
 		{
 			name: "shipments page", fixture: `{"items":[` + fixtureShipment + `],"total_count":1}`, wantPath: "/rest/V1/shipments", wantQuery: url.Values{"searchCriteria": {""}},
-			call: func(ctx context.Context, c *Client) (any, error) { return GetShipmentsPage(ctx, c, NewSearchCriteria()) },
+			call: func(ctx context.Context, c *Client) (any, error) {
+				return GetShipmentsPage(ctx, c, NewSearchCriteria())
+			},
 		},
 		{
 			name: "shipment", fixture: fixtureShipment, wantPath: "/rest/V1/shipment/2",
@@ -185,12 +187,12 @@ func TestReadServices(t *testing.T) {
 		{
 			name: "low stock items", fixture: `{"items":[` + fixtureStockItem + `],"total_count":1}`, wantPath: "/rest/V1/stockItems/lowStock/",
 			wantQuery: url.Values{"scopeId": {"0"}, "qty": {"10"}, "currentPage": {"1"}, "pageSize": {"50"}},
-			call: func(ctx context.Context, c *Client) (any, error) { return GetLowStockItems(ctx, c, 0, 10, 0, 50) },
+			call:      func(ctx context.Context, c *Client) (any, error) { return GetLowStockItems(ctx, c, 0, 10, 0, 50) },
 		},
 		{
 			name: "store configs", fixture: fixtureStoreConfigs, wantPath: "/rest/V1/store/storeConfigs",
 			wantQuery: url.Values{"storeCodes[]": {"default", "de"}},
-			call: func(ctx context.Context, c *Client) (any, error) { return GetStoreConfigs(ctx, c, "default", "de") },
+			call:      func(ctx context.Context, c *Client) (any, error) { return GetStoreConfigs(ctx, c, "default", "de") },
 		},
 		{
 			name: "store configs, all", fixture: fixtureStoreConfigs, wantPath: "/rest/V1/store/storeConfigs",

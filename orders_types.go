@@ -241,16 +241,16 @@ type Order struct {
 						Code  string  `json:"code,omitempty"`
 						Cost  float64 `json:"cost,omitempty"`
 					} `json:"shipping_experience,omitempty"`
-					CollectionPofloat64 *struct {
-						RecipientAddressID    float64  `json:"recipient_address_id,omitempty"`
-						CollectionPofloat64ID string   `json:"collection_pofloat64_id,omitempty"`
-						Name                  string   `json:"name,omitempty"`
-						Country               string   `json:"country,omitempty"`
-						Region                string   `json:"region,omitempty"`
-						Postcode              string   `json:"postcode,omitempty"`
-						City                  string   `json:"city,omitempty"`
-						Street                []string `json:"street,omitempty"`
-					} `json:"collection_pofloat64,omitempty"`
+					CollectionPoint *struct {
+						RecipientAddressID float64  `json:"recipient_address_id,omitempty"`
+						CollectionPointID  string   `json:"collection_point_id,omitempty"`
+						Name               string   `json:"name,omitempty"`
+						Country            string   `json:"country,omitempty"`
+						Region             string   `json:"region,omitempty"`
+						Postcode           string   `json:"postcode,omitempty"`
+						City               string   `json:"city,omitempty"`
+						Street             []string `json:"street,omitempty"`
+					} `json:"collection_point,omitempty"`
 				} `json:"extension_attributes,omitempty"`
 			} `json:"shipping,omitempty"`
 			Items               []Item  `json:"items,omitempty"`
@@ -388,7 +388,7 @@ type Order struct {
 		GwItemsTaxRefunded       string  `json:"gw_items_tax_refunded,omitempty"`
 		GwCardBaseTaxRefunded    string  `json:"gw_card_base_tax_refunded,omitempty"`
 		GwCardTaxRefunded        string  `json:"gw_card_tax_refunded,omitempty"`
-		RewardPofloat64sBalance  float64 `json:"reward_pofloat64s_balance,omitempty"`
+		RewardPointsBalance      float64 `json:"reward_points_balance,omitempty"`
 		RewardCurrencyAmount     float64 `json:"reward_currency_amount,omitempty"`
 		BaseRewardCurrencyAmount float64 `json:"base_reward_currency_amount,omitempty"`
 		AmazonOrderReferenceID   *struct {
