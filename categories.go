@@ -1,7 +1,9 @@
 package magento2
 
 import (
+	"context"
 	"fmt"
+	"net/http"
 )
 
 type MCategory struct {
@@ -17,28 +19,15 @@ func CreateCategory(c *Category, apiClient *Client) (*MCategory, error) {
 		Products:  &[]ProductLink{},
 		APIClient: apiClient,
 	}
-	endpoint := categories
-	httpClient := apiClient.HTTPClient
 
 	payLoad := createCategoryPayload{
 		Category: *c,
 	}
 
-	logger().Debug().
-		Interface("payload", payLoad).
-		Str("endpoint", endpoint).
-		Msg("Creating category")
-
-	resp, err := httpClient.R().SetBody(payLoad).SetResult(mC.Category).Post(endpoint)
+	_, err := apiClient.v1(context.Background(), http.MethodPost, categories, payLoad, mC.Category, "create category")
 	mC.Route = fmt.Sprintf("%s/%d", categories, mC.Category.ID)
-
 	if err != nil {
-		return mC, fmt.Errorf("error creating category: %w", err)
-	}
-
-	httpErr := mayReturnErrorForHTTPResponse(resp, "create category")
-	if httpErr != nil {
-		return mC, httpErr
+		return mC, err
 	}
 
 	return mC, nil
@@ -52,65 +41,33 @@ func GetCategoryByName(name string, apiClient *Client) (*MCategory, error) {
 	}
 	searchQuery := BuildSearchQuery("name", name, "in")
 	endpoint := categoriesList + "?" + searchQuery
-	httpClient := apiClient.HTTPClient
 
 	response := &categorySearchQueryResponse{}
-
-	logger().Debug().
-		Str("name", name).
-		Str("endpoint", endpoint).
-		Msg("Getting category by name")
-
-	resp, err := httpClient.R().SetResult(response).Get(endpoint)
-
-	if err != nil {
-		return nil, fmt.Errorf("error getting category by name: %w", err)
-	}
-
-	httpErr := mayReturnErrorForHTTPResponse(resp, "get category by name from remote")
-	if httpErr != nil {
-		return nil, httpErr
+	if _, err := apiClient.v1(context.Background(), http.MethodGet, endpoint, nil, response, "get category by name from remote"); err != nil {
+		return nil, err
 	}
 
 	if len(response.Categories) == 0 {
-		logger().Warn().Str("name", name).Msg("Category not found by name")
 		return nil, ErrNotFound
 	}
 
 	mC.Category = &response.Categories[0]
 	mC.Route = fmt.Sprintf("%s/%d", categories, mC.Category.ID)
 
-	err = mC.UpdateCategoryFromRemote()
+	err := mC.UpdateCategoryFromRemote()
 	if err != nil {
 		return mC, fmt.Errorf("error updating category from remote after getting by name: %w", err)
-	}
-
-	httpErr = mayReturnErrorForHTTPResponse(resp, "get detailed category by name from remote")
-	if httpErr != nil {
-		return mC, httpErr
 	}
 
 	return mC, nil
 }
 
 func (mC *MCategory) UpdateCategoryFromRemote() error {
-	logger().Debug().
-		Str("route", mC.Route).
-		Msg("Updating category details from remote")
-
-	resp, err := mC.APIClient.HTTPClient.R().SetResult(mC.Category).Get(mC.Route)
-
-	if err != nil {
-		logger().Error().Err(err).Msg("Error updating category details from remote")
-		return fmt.Errorf("error getting category from remote: %w", err)
+	if _, err := mC.APIClient.v1(context.Background(), http.MethodGet, mC.Route, nil, mC.Category, "get category from remote"); err != nil {
+		return err
 	}
 
-	httpErr := mayReturnErrorForHTTPResponse(resp, "get category from remote")
-	if httpErr != nil {
-		return httpErr
-	}
-
-	err = mC.UpdateCategoryProductsFromRemote()
+	err := mC.UpdateCategoryProductsFromRemote()
 	if err != nil {
 		return fmt.Errorf("error updating category products from remote after updating category details: %w", err)
 	}
@@ -119,22 +76,8 @@ func (mC *MCategory) UpdateCategoryFromRemote() error {
 
 func (mC *MCategory) UpdateCategoryProductsFromRemote() error {
 	productsRoute := fmt.Sprintf("%s/%s", mC.Route, categoriesProductsRelative)
-	logger().Debug().
-		Str("route", productsRoute).
-		Msg("Updating category products from remote")
-
-	resp, err := mC.APIClient.HTTPClient.R().SetResult(mC.Products).Get(productsRoute)
-
-	if err != nil {
-		logger().Error().Err(err).Msg("Error updating category products from remote")
-		return fmt.Errorf("error getting category products from remote: %w", err)
-	}
-
-	httpErr := mayReturnErrorForHTTPResponse(resp, "get category products from remote")
-	if httpErr != nil {
-		return httpErr
-	}
-	return nil
+	_, err := mC.APIClient.v1(context.Background(), http.MethodGet, productsRoute, nil, mC.Products, "get category products from remote")
+	return err
 }
 
 func (mC *MCategory) AssignProductByProductLink(pl *ProductLink) error {
@@ -142,28 +85,12 @@ func (mC *MCategory) AssignProductByProductLink(pl *ProductLink) error {
 		pl.CategoryID = fmt.Sprintf("%d", mC.Category.ID)
 	}
 
-	httpClient := mC.APIClient.HTTPClient
 	endpoint := fmt.Sprintf("%s/%s", mC.Route, categoriesProductsRelative)
 
 	payLoad := assignProductPayload{ProductLink: *pl}
 
-	logger().Debug().
-		Str("sku", pl.Sku).
-		Int("categoryID", mC.Category.ID).
-		Str("endpoint", endpoint).
-		Interface("payload", payLoad).
-		Msg("Assigning product to category")
-
-	resp, err := httpClient.R().SetBody(payLoad).Put(endpoint)
-
-	if err != nil {
-		logger().Error().Err(err).Msg("Error assigning product to category")
-		return fmt.Errorf("error assigning product to category: %w", err)
-	}
-
-	httpErr := mayReturnErrorForHTTPResponse(resp, "assign product to category")
-	if httpErr != nil {
-		return httpErr
+	if _, err := mC.APIClient.v1(context.Background(), http.MethodPut, endpoint, payLoad, nil, "assign product to category"); err != nil {
+		return err
 	}
 
 	*mC.Products = append(*mC.Products, *pl)

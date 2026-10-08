@@ -6,7 +6,6 @@ import (
 	"time"
 
 	magento2 "github.com/florinel-chis/go-m2rest"
-	"github.com/rs/zerolog/log"
 )
 
 func setupAdvancedTestClient(t *testing.T) (*magento2.Client, *TestConfig) {
@@ -20,6 +19,7 @@ func setupAdvancedTestClient(t *testing.T) (*magento2.Client, *TestConfig) {
 }
 
 func TestAdvancedProducts_ConfigurableProduct(t *testing.T) {
+	skipWithoutWrites(t)
 	client, _ := setupAdvancedTestClient(t)
 
 	t.Run("Create Configurable Product with Variations", func(t *testing.T) {
@@ -62,10 +62,7 @@ func TestAdvancedProducts_ConfigurableProduct(t *testing.T) {
 			t.Errorf("Failed to create color attribute: %v", err)
 			return
 		}
-		log.Info().
-			Str("code", createdColorAttr.Attribute.AttributeCode).
-			Int("id", createdColorAttr.Attribute.AttributeID).
-			Msg("Color attribute created")
+		t.Logf("Color attribute created code=%v id=%v", createdColorAttr.Attribute.AttributeCode, createdColorAttr.Attribute.AttributeID)
 
 		// Create size attribute
 		createdSizeAttr, err := magento2.CreateAttribute(&sizeAttr, client)
@@ -73,10 +70,7 @@ func TestAdvancedProducts_ConfigurableProduct(t *testing.T) {
 			t.Errorf("Failed to create size attribute: %v", err)
 			return
 		}
-		log.Info().
-			Str("code", createdSizeAttr.Attribute.AttributeCode).
-			Int("id", createdSizeAttr.Attribute.AttributeID).
-			Msg("Size attribute created")
+		t.Logf("Size attribute created code=%v id=%v", createdSizeAttr.Attribute.AttributeCode, createdSizeAttr.Attribute.AttributeID)
 
 		// Step 2: Create configurable product
 		configurableSku := fmt.Sprintf("configurable-test-%d", timestamp)
@@ -96,10 +90,7 @@ func TestAdvancedProducts_ConfigurableProduct(t *testing.T) {
 			t.Errorf("Failed to create configurable product: %v", err)
 			return
 		}
-		log.Info().
-			Str("sku", mConfigurable.Product.Sku).
-			Int("id", mConfigurable.Product.ID).
-			Msg("Configurable product created")
+		t.Logf("Configurable product created sku=%v id=%v", mConfigurable.Product.Sku, mConfigurable.Product.ID)
 
 		// Step 3: Create simple product variations
 		variations := []struct {
@@ -178,10 +169,7 @@ func TestAdvancedProducts_ConfigurableProduct(t *testing.T) {
 			}
 
 			childProducts = append(childProducts, mChild)
-			log.Info().
-				Str("sku", mChild.Product.Sku).
-				Float64("price", mChild.Product.Price).
-				Msg("Child product created")
+			t.Logf("Child product created sku=%v price=%v", mChild.Product.Sku, mChild.Product.Price)
 		}
 
 		// Step 4: Link child products to configurable product using Magento API
@@ -197,6 +185,7 @@ func TestAdvancedProducts_ConfigurableProduct(t *testing.T) {
 }
 
 func TestAdvancedProducts_BundleProduct(t *testing.T) {
+	skipWithoutWrites(t)
 	client, _ := setupAdvancedTestClient(t)
 
 	t.Run("Create Bundle Product", func(t *testing.T) {
@@ -248,10 +237,7 @@ func TestAdvancedProducts_BundleProduct(t *testing.T) {
 			}
 
 			componentProducts = append(componentProducts, mComponent)
-			log.Info().
-				Str("sku", mComponent.Product.Sku).
-				Float64("price", mComponent.Product.Price).
-				Msg("Bundle component created")
+			t.Logf("Bundle component created sku=%v price=%v", mComponent.Product.Sku, mComponent.Product.Price)
 		}
 
 		// Step 2: Create bundle product
@@ -273,10 +259,7 @@ func TestAdvancedProducts_BundleProduct(t *testing.T) {
 			return
 		}
 
-		log.Info().
-			Str("sku", mBundle.Product.Sku).
-			Int("id", mBundle.Product.ID).
-			Msg("Bundle product created")
+		t.Logf("Bundle product created sku=%v id=%v", mBundle.Product.Sku, mBundle.Product.ID)
 
 		// Step 3: Create bundle options and link products
 		// Note: This requires additional Magento API calls for bundle options
@@ -286,6 +269,7 @@ func TestAdvancedProducts_BundleProduct(t *testing.T) {
 }
 
 func TestAdvancedProducts_VirtualProduct(t *testing.T) {
+	skipWithoutWrites(t)
 	client, _ := setupAdvancedTestClient(t)
 
 	t.Run("Create Virtual Product", func(t *testing.T) {
@@ -308,11 +292,7 @@ func TestAdvancedProducts_VirtualProduct(t *testing.T) {
 			return
 		}
 
-		log.Info().
-			Str("sku", mVirtual.Product.Sku).
-			Float64("price", mVirtual.Product.Price).
-			Str("type", mVirtual.Product.TypeID).
-			Msg("Virtual product created")
+		t.Logf("Virtual product created sku=%v price=%v type=%v", mVirtual.Product.Sku, mVirtual.Product.Price, mVirtual.Product.TypeID)
 
 		// Virtual products don't need stock management in the traditional sense
 		t.Logf("Virtual product created successfully: %s", mVirtual.Product.Sku)
@@ -320,6 +300,7 @@ func TestAdvancedProducts_VirtualProduct(t *testing.T) {
 }
 
 func TestAdvancedProducts_GroupedProduct(t *testing.T) {
+	skipWithoutWrites(t)
 	client, _ := setupAdvancedTestClient(t)
 
 	t.Run("Create Grouped Product", func(t *testing.T) {
@@ -371,10 +352,7 @@ func TestAdvancedProducts_GroupedProduct(t *testing.T) {
 			}
 
 			groupedProducts = append(groupedProducts, mComponent)
-			log.Info().
-				Str("sku", mComponent.Product.Sku).
-				Float64("price", mComponent.Product.Price).
-				Msg("Group component created")
+			t.Logf("Group component created sku=%v price=%v", mComponent.Product.Sku, mComponent.Product.Price)
 		}
 
 		// Step 2: Create grouped product
@@ -396,10 +374,7 @@ func TestAdvancedProducts_GroupedProduct(t *testing.T) {
 			return
 		}
 
-		log.Info().
-			Str("sku", mGroup.Product.Sku).
-			Int("id", mGroup.Product.ID).
-			Msg("Grouped product created")
+		t.Logf("Grouped product created sku=%v id=%v", mGroup.Product.Sku, mGroup.Product.ID)
 
 		// Step 3: Link associated products to grouped product
 		// Note: This requires additional Magento API calls for product links
@@ -409,6 +384,7 @@ func TestAdvancedProducts_GroupedProduct(t *testing.T) {
 }
 
 func TestAdvancedProducts_AttributeOptions(t *testing.T) {
+	skipWithoutWrites(t)
 	client, _ := setupAdvancedTestClient(t)
 
 	t.Run("Create Attribute with Options", func(t *testing.T) {
@@ -431,10 +407,7 @@ func TestAdvancedProducts_AttributeOptions(t *testing.T) {
 			return
 		}
 
-		log.Info().
-			Str("code", createdAttr.Attribute.AttributeCode).
-			Int("id", createdAttr.Attribute.AttributeID).
-			Msg("Dropdown attribute created")
+		t.Logf("Dropdown attribute created code=%v id=%v", createdAttr.Attribute.AttributeCode, createdAttr.Attribute.AttributeID)
 
 		// Add options to the attribute
 		options := []magento2.Option{
@@ -448,10 +421,7 @@ func TestAdvancedProducts_AttributeOptions(t *testing.T) {
 			if err != nil {
 				t.Errorf("Failed to add option %d: %v", i, err)
 			} else {
-				log.Info().
-					Str("option", option.Label).
-					Str("result", result).
-					Msg("Option added to attribute")
+				t.Logf("Option added to attribute option=%v result=%v", option.Label, result)
 			}
 		}
 	})

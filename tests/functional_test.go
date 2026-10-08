@@ -1,13 +1,13 @@
 package magento2
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"testing"
 	"time"
 
 	magento2 "github.com/florinel-chis/go-m2rest"
-	"github.com/rs/zerolog/log"
 )
 
 // skipWithoutMagentoHost skips live-server tests when no Magento instance is
@@ -39,7 +39,7 @@ func TestFunctionalV2_APIConnection(t *testing.T) {
 	t.Run("Test API Connection", func(t *testing.T) {
 		// Try to get a product that likely doesn't exist
 		_, err := magento2.GetProductBySKU("test-connection-sku", client)
-		if err != nil && err != magento2.ErrNotFound {
+		if err != nil && !errors.Is(err, magento2.ErrNotFound) {
 			// If we get an auth error or connection error, that's a problem
 			t.Logf("Connection test result: %v", err)
 		} else {
@@ -49,6 +49,7 @@ func TestFunctionalV2_APIConnection(t *testing.T) {
 }
 
 func TestFunctionalV2_Products(t *testing.T) {
+	skipWithoutWrites(t)
 	client, _ := setupTestClientV2(t)
 
 	t.Run("Create and Retrieve Product", func(t *testing.T) {
@@ -76,10 +77,7 @@ func TestFunctionalV2_Products(t *testing.T) {
 			t.Error("Created product has no SKU")
 		}
 
-		log.Info().
-			Str("sku", mProduct.Product.Sku).
-			Interface("product", mProduct.Product).
-			Msg("Product created successfully")
+		t.Logf("Product created successfully sku=%v product=%v", mProduct.Product.Sku, mProduct.Product)
 
 		// Retrieve product by SKU
 		retrieved, err := magento2.GetProductBySKU(sku, client)
@@ -137,13 +135,11 @@ func TestFunctionalV2_Categories(t *testing.T) {
 			}
 		}
 
-		log.Info().
-			Int("id", category.Category.ID).
-			Str("name", category.Category.Name).
-			Msg("Found category")
+		t.Logf("Found category id=%v name=%v", category.Category.ID, category.Category.Name)
 	})
 
 	t.Run("Create Category", func(t *testing.T) {
+		skipWithoutWrites(t)
 		category := magento2.Category{
 			Name:          fmt.Sprintf("Test Category %d", time.Now().Unix()),
 			IsActive:      true,
@@ -166,15 +162,13 @@ func TestFunctionalV2_Categories(t *testing.T) {
 		if created.Category.ID == 0 {
 			t.Error("Created category has no ID")
 		} else {
-			log.Info().
-				Int("id", created.Category.ID).
-				Str("name", created.Category.Name).
-				Msg("Category created successfully")
+			t.Logf("Category created successfully id=%v name=%v", created.Category.ID, created.Category.Name)
 		}
 	})
 }
 
 func TestFunctionalV2_Attributes(t *testing.T) {
+	skipWithoutWrites(t)
 	client, _ := setupTestClientV2(t)
 
 	t.Run("Create and Retrieve Attribute", func(t *testing.T) {
@@ -198,10 +192,7 @@ func TestFunctionalV2_Attributes(t *testing.T) {
 		if created.Attribute.AttributeID == 0 {
 			t.Error("Created attribute has no ID")
 		} else {
-			log.Info().
-				Int("id", created.Attribute.AttributeID).
-				Str("code", created.Attribute.AttributeCode).
-				Msg("Attribute created successfully")
+			t.Logf("Attribute created successfully id=%v code=%v", created.Attribute.AttributeID, created.Attribute.AttributeCode)
 		}
 
 		// Retrieve attribute
@@ -219,6 +210,7 @@ func TestFunctionalV2_Attributes(t *testing.T) {
 }
 
 func TestFunctionalV2_Cart(t *testing.T) {
+	skipWithoutWrites(t)
 	client, _ := setupTestClientV2(t)
 
 	t.Run("Guest Cart Basic Flow", func(t *testing.T) {
@@ -232,7 +224,7 @@ func TestFunctionalV2_Cart(t *testing.T) {
 			t.Fatal("Guest cart has no ID")
 		}
 
-		log.Info().Str("cartID", guestCart.QuoteID).Msg("Guest cart created")
+		t.Logf("Guest cart created cartID=%v", guestCart.QuoteID)
 
 		// First, create a test product to add to cart
 		sku := fmt.Sprintf("cart-test-product-%d", time.Now().Unix())
@@ -280,9 +272,7 @@ func TestFunctionalV2_Cart(t *testing.T) {
 		if err != nil {
 			t.Errorf("Failed to add items to cart: %v", err)
 		} else {
-			log.Info().
-				Interface("items", items).
-				Msg("Items added to cart successfully")
+			t.Logf("Items added to cart successfully items=%v", items)
 		}
 
 		// Estimate shipping methods
@@ -303,9 +293,7 @@ func TestFunctionalV2_Cart(t *testing.T) {
 		if err != nil {
 			t.Logf("Failed to estimate shipping: %v", err)
 		} else {
-			log.Info().
-				Interface("carriers", carriers).
-				Msg("Shipping methods estimated")
+			t.Logf("Shipping methods estimated carriers=%v", carriers)
 		}
 
 		// Estimate payment methods
@@ -313,9 +301,7 @@ func TestFunctionalV2_Cart(t *testing.T) {
 		if err != nil {
 			t.Logf("Failed to estimate payment methods: %v", err)
 		} else {
-			log.Info().
-				Interface("paymentMethods", paymentMethods).
-				Msg("Payment methods estimated")
+			t.Logf("Payment methods estimated paymentMethods=%v", paymentMethods)
 		}
 	})
 }

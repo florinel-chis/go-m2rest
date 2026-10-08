@@ -83,7 +83,7 @@ type Options struct {
 	Title               string         `json:"title,omitempty"`
 	Type                string         `json:"type,omitempty"`
 	SortOrder           int            `json:"sort_order,omitempty"`
-	IsRequired          bool           `json:"is_required,omitempty"`
+	IsRequired          bool           `json:"is_require,omitempty"`
 	Price               float64        `json:"price,omitempty"`
 	PriceType           string         `json:"price_type,omitempty"`
 	Sku                 string         `json:"sku,omitempty"`

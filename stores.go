@@ -1,10 +1,16 @@
 package magento2
 
-import "context"
+import (
+	"context"
+	"net/url"
+)
 
 const (
-	storeStoreViews = "/store/storeViews"
-	storeWebsites   = "/store/websites"
+	storeStoreViews = "/store/storeViews" // GET module-store/etc/webapi.xml:11
+	storeWebsites   = "/store/websites"   // GET module-store/etc/webapi.xml:27
+
+	routeStoreConfigs = "/V1/store/storeConfigs" // GET module-store/etc/webapi.xml:35
+	routeStoreGroups  = "/V1/store/storeGroups"  // GET module-store/etc/webapi.xml:19
 )
 
 // StoreView is a Magento store view (GET /store/storeViews).
@@ -40,4 +46,28 @@ func GetWebsites(ctx context.Context, c *Client) ([]Website, error) {
 		return nil, err
 	}
 	return websites, nil
+}
+
+// GetStoreConfigs returns the configuration (locale, currencies, base URLs)
+// of the given store views, or of all of them when storeCodes is empty
+// (GET /V1/store/storeConfigs?storeCodes[]=...).
+func GetStoreConfigs(ctx context.Context, c *Client, storeCodes ...string) ([]StoreConfigEntry, error) {
+	var q url.Values
+	if len(storeCodes) > 0 {
+		q = url.Values{"storeCodes[]": storeCodes}
+	}
+	var out []StoreConfigEntry
+	if err := c.DoJSON(ctx, Request{Path: routeStoreConfigs, Query: q}, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// GetStoreGroups returns all store groups (GET /V1/store/storeGroups).
+func GetStoreGroups(ctx context.Context, c *Client) ([]StoreGroup, error) {
+	var out []StoreGroup
+	if err := c.DoJSON(ctx, Request{Path: routeStoreGroups}, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }

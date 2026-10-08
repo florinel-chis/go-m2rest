@@ -7,6 +7,141 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v0.2.0] - 2026-10-08
+
+Plain `net/http` core, hardened embedding, read services, drift check. go-m2rest now has no
+non-standard-library dependency.
+
+### Breaking
+
+- **Go 1.27 required.** `go.mod` declares `go 1.27.0` (`toolchain go1.27.1`). Dependents must
+  declare `go 1.27.0` or later in their own `go.mod` (`go mod edit -go=1.27.0`).
+- **resty removed; `Client.HTTPClient` is gone.** The client is built on `net/http`. Supply your
+  own `*http.Client` instead of reconfiguring resty; it is used exactly as given (only `Do` is
+  called — its `Transport`, `Timeout`, `Jar` and `CheckRedirect` apply and are never modified):
+  ```go
+  // before
+  api, _ := m2.NewAPIClientFromIntegration(sc, token)
+  api.HTTPClient.SetTransport(hc.Transport)
+  api.SetTimeout(hc.Timeout)
+
+  // after
+  hc.Timeout = 30 * time.Second // a supplied client gets NO default timeout: set it yourself
+  api, _ := m2.NewAPIClientFromIntegration(sc, token, m2.WithHTTPClient(hc))
+  ```
+  **A supplied `*http.Client` gets no default timeout.** The 30s `DefaultTimeout` applies only to
+  the client go-m2rest builds itself; `WithTimeout` and `SetTimeout` do not touch a supplied
+  client. Set `Timeout` on it (or bound every call with a context deadline) — before v0.2.0 resty
+  applied its own 30s timeout around a supplied transport, so dropping this silently removes it.
+  Raw calls through `Client.HTTPClient.R()` become `client.Do` / `client.DoJSON`:
+  ```go
+  // before
+  resp, err := client.HTTPClient.R().SetBody(payload).Post("/guest-carts/" + id + "/items")
+  // after
+  resp, err := client.Do(ctx, m2.Request{Method: http.MethodPost, Path: "/V1/guest-carts/" + id + "/items", Body: payload})
+  ```
+  Reading the default timeout through `HTTPClient.GetClient().Timeout` is replaced by the
+  `DefaultTimeout` constant (or `WithTimeout` to change it).
+- **zerolog removed; logging is a per-client `*slog.Logger`.** `SetZeroLogger`,
+  `EnableDebugLogging`, `DisableDebugLogging` and `SetLogger` are removed:
+  ```go
+  // before
+  magento2.SetZeroLogger(myZerolog)
+  magento2.EnableDebugLogging()
+  // after
+  client, err := m2.New(base, m2.WithLogger(slog.New(slog.NewTextHandler(os.Stderr,
+      &slog.HandlerOptions{Level: slog.LevelDebug}))))
+  ```
+  The client logs one debug record per attempt (method, path, status, elapsed, bytes, truncated)
+  and never a body, a header or a query string.
+- **Deprecated retry constants removed** (`RetryAttempts`, `RetryWaitSeconds`,
+  `RetryMaxWaitSeconds`). Use `WithRetryPolicy(count, wait, maxWait)` or `SetRetryPolicy`; the
+  defaults are `DefaultRetryCount`, `DefaultRetryWaitTime`, `DefaultRetryMaxWaitTime`.
+- **`APIError` reshaped.** `Endpoint string` is replaced by `Method` and `Path` (no host, no query);
+  `Body` is now `[]byte` (capped at the body cap like a 2xx body, or at 64 KiB when no cap is set) and the new
+  `Message` / `Parameters` carry the parsed Magento error document. `Error()` is
+  `"magento2: GET /V1/orders: status 404: <message>"`.
+  ```go
+  // before
+  log.Printf("%s %s", apiErr.Endpoint, apiErr.Body)
+  // after
+  log.Printf("%s %s: %s", apiErr.Method, apiErr.Path, apiErr.Message)
+  ```
+- **Empty store code sends no store segment.** `StoreConfig{StoreCode: ""}` used to request
+  `/rest//V1/...`; it now requests `/rest/V1/...` (the default store view).
+- **Address and option types match the Magento interface of each context** (one Go type used to
+  stand in for several, so fields were silently dropped or never matched):
+  - `Order.BillingAddress` is `*OrderAddress` (was `*BillingAddress`, a quote address) —
+    migrate: `&magento2.OrderAddress{...}`; flat field access (`.Firstname`, `.Street`, ...)
+    keeps compiling, `.Address.X` becomes `.X`, `ParentID`/`VatIsValid` are now `int`.
+  - The shipping-assignment address (`Order.ExtensionAttributes.ShippingAssignments[i].Shipping.Address`)
+    is `*OrderAddress` (was `*ShippingAddress`) — same migration.
+  - `Customer.Addresses` is `[]CustomerAddress` (was `[]Address`, a quote address) — migrate:
+    `magento2.CustomerAddress{...}`; `Region` is now a `*Region` object and
+    `DefaultBilling`/`DefaultShipping` are `bool`, as Magento sends them.
+  - `MConfigurableProduct.Options` is `*[]ConfigurableProductOption` (was `*[]Option`, the
+    attribute option type) — migrate: range over `ConfigurableProductOption` (`AttributeID`,
+    `Label`, `Values[i].ValueIndex`).
+  `BillingAddress`, `ShippingAddress` and `Address` stay the quote (cart) address types.
+- **Tag fixes in existing types.** `Options.IsRequired` decodes Magento's `is_require` (it never
+  matched before); the Order extension fields mangled to `CollectionPofloat64`,
+  `CollectionPofloat64ID` and `RewardPofloat64sBalance` are now `CollectionPoint`,
+  `CollectionPointID` and `RewardPointsBalance` (`collection_point`, `collection_point_id`,
+  `reward_points_balance`).
+
+### Added
+
+- `New(baseURL, ...ClientOption)` with `WithToken`, `WithHTTPClient`, `WithTimeout`,
+  `WithUserAgent`, `WithLogger`, `WithStoreCode`, `WithAllowedMethods`, `WithRetryPolicy`,
+  `WithFollowRedirects`, `WithMaxBodyBytes`, `WithRedactor`, `WithRequestHook`,
+  `WithResponseHook`. The compat constructors accept the same options.
+- `Request` / `Response`, `(*Client).Do` and `DoJSON` (refuses a truncated body with
+  `ErrBodyTruncated`); `ErrMethodNotAllowed`; `DefaultUserAgent`.
+- `SearchCriteria` builder (`NewSearchCriteria`, `Filter`, `FilterIn`, `Or`, `And`, `Sort`,
+  `Page`, `RestrictFields`, `Values`), `Cond` and `SortDir` constants, `MinPageSize` /
+  `MaxPageSize`, `PageSizeLimit`.
+- `ParseErrorDocument` / `ErrorDocument` (`Substituted`, `Resources`).
+- Read services, context-first: `GetOrdersPage` / `IterateOrders` / `GetOrder`, invoices,
+  credit memos, shipments (page / iterate / get), `GetCustomersPage` / `IterateCustomers` /
+  `GetCustomer`, MSI `GetSourceItemsPage` / `GetSourcesPage` / `GetStocksPage` (+ `Iterate*`) and
+  `GetSalableQuantity`, `GetStockItem`, `GetLowStockItems`, `GetStoreConfigs`,
+  `GetStoreGroups`, `GetCartsPage` / `IterateCarts`, `GetSchema`.
+- `OrderAddress` (`OrderAddressInterface`) and `CustomerAddress` (customer `AddressInterface`).
+- `Routes()` — the registry of every route the package calls, with the Go type each response
+  decodes into.
+- `cmd/m2drift` — compares `Routes()` and the registered types with a store's
+  `/rest/all/schema`; `DRIFT.md` holds the latest report.
+
+### Changed
+
+- Store-code rule: with no store code (neither `WithStoreCode` nor `Request.StoreCode`) requests go
+  to `/rest/V1/...`, which Magento serves from the default store view whatever its code; a code
+  scopes them to `/rest/<code>/V1/...`. Previously `/rest/{code}/V1` was always inserted and an
+  empty `StoreConfig.StoreCode` produced `/rest//V1`.
+- Retries keep the previous policy (idempotent methods, 429/500/502/503/504 and transport
+  errors, `Retry-After`) and are now implemented over `net/http`; `WithRetryPolicy(0, …)` means
+  exactly one attempt.
+- The default `*http.Client` has no cookie jar (resty stored and replayed store cookies). Its
+  transport is a clone of `http.DefaultTransport`, which keeps `ProxyFromEnvironment`.
+- `BuildSearchQuery` / `BuildFlexibleSearchQuery` no longer put a stray `=` into the
+  `searchCriteria` keys; SKUs and codes are path-escaped in the service functions.
+- `GetOrderByIncrementID` fetches `/V1/orders/{id}` (it used to request an empty route);
+  `NewAPIClientFromAuthentication` returns an error when the store refuses the credentials
+  instead of using the error text as a token.
+- Live tests need an explicit `MAGENTO_HOST` (no `http://localhost` default); tests that write
+  skip unless `MAGENTO_TEST_ALLOW_WRITES=1`.
+
+### Removed
+
+- Dependencies `github.com/go-resty/resty/v2` and `github.com/rs/zerolog` (and their indirect
+  dependencies).
+- `Client.HTTPClient`, `SetZeroLogger`, `EnableDebugLogging`, `DisableDebugLogging`, `SetLogger`,
+  `RetryAttempts`, `RetryWaitSeconds`, `RetryMaxWaitSeconds`.
+
+## [v0.1.0] - 2026-08-11
+
+The state at commit `655ff58`.
+
 ### Breaking - 2026-08-10
 - `Attribute.IsFilterable` and `Attribute.IsFilterableInSearch` changed from `bool` to the new `FlexBool` type (a struct with a `Value bool` field, a `Bool()` accessor and a `NewFlexBool` constructor). Code assigning these fields to/from plain `bool` needs `attr.IsFilterable.Bool()` for reads and `attr.IsFilterable = magento2.NewFlexBool(true)` for writes. In exchange, Magento's `is_filterable=2` ("Filterable (no results)") now decodes correctly and round-trips losslessly instead of being silently rewritten to `1` on update
 - Corrupted generated field `WrappingAddPrfloat64edCard` (json `wrapping_add_prfloat64ed_card`) renamed to `WrappingAddPrintedCard` (json `wrapping_add_printed_card`) — references to the old Go field name no longer compile; the old JSON tag never matched Magento's real key

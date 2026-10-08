@@ -1,8 +1,11 @@
 package magento2
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"strconv"
 )
 
@@ -40,29 +43,15 @@ func NewCustomerCartFromAPIClient(apiClient *Client) (*MCart, error) {
 }
 
 func (cart *MCart) initializeGuestCart() error {
-	endpoint := guestCart
-	apiClient := cart.APIClient
-
-	httpClient := apiClient.HTTPClient
-	logger().Debug().Str("endpoint", endpoint).Msg("Initializing guest cart")
-	resp, err := httpClient.R().Post(endpoint)
-
+	body, err := cart.APIClient.v1(context.Background(), http.MethodPost, guestCart, nil, nil, "initialize cart for guest")
 	if err != nil {
-		return fmt.Errorf("error initializing guest cart: %w", err)
+		return err
 	}
 
-	httpErr := mayReturnErrorForHTTPResponse(resp, "initialize cart for guest")
-	if httpErr != nil {
-		return httpErr
-	}
-
-	quoteID := mayTrimSurroundingQuotes(resp.String())
-
-	cart.Route = guestCart + "/" + quoteID
+	quoteID := mayTrimSurroundingQuotes(string(body))
+	cart.Route = guestCart + "/" + url.PathEscape(quoteID)
 	cart.QuoteID = quoteID
-	cart.APIClient = apiClient
 
-	logger().Debug().Str("quoteID", quoteID).Msg("Guest cart initialized successfully, updating from remote")
 	err = cart.UpdateFromRemote()
 	if err != nil {
 		return fmt.Errorf("error updating guest cart from remote after initialization: %w", err)
@@ -71,29 +60,15 @@ func (cart *MCart) initializeGuestCart() error {
 }
 
 func (cart *MCart) initializeCustomerCart() error {
-	endpoint := customerCart
-	apiClient := cart.APIClient
-
-	httpClient := apiClient.HTTPClient
-	logger().Debug().Str("endpoint", endpoint).Msg("Initializing customer cart")
-	resp, err := httpClient.R().Post(endpoint)
-
+	// POST /carts/mine answers the quote id as a JSON number or string.
+	body, err := cart.APIClient.v1(context.Background(), http.MethodPost, customerCart, nil, nil, "initialize cart for customer")
 	if err != nil {
-		return fmt.Errorf("error initializing customer cart: %w", err)
+		return err
 	}
-
-	httpErr := mayReturnErrorForHTTPResponse(resp, "initialize cart for customer")
-	if httpErr != nil {
-		return httpErr
-	}
-
-	quoteID := mayTrimSurroundingQuotes(resp.String())
 
 	cart.Route = customerCart
-	cart.QuoteID = quoteID
-	cart.APIClient = apiClient
+	cart.QuoteID = mayTrimSurroundingQuotes(string(body))
 
-	logger().Debug().Str("quoteID", quoteID).Msg("Customer cart initialized successfully, updating from remote")
 	err = cart.UpdateFromRemote()
 	if err != nil {
 		return fmt.Errorf("error updating customer cart from remote after initialization: %w", err)
@@ -102,27 +77,12 @@ func (cart *MCart) initializeCustomerCart() error {
 }
 
 func (cart *MCart) UpdateFromRemote() error {
-	httpClient := cart.APIClient.HTTPClient
-	logger().Debug().Str("route", cart.Route).Msg("Updating cart from remote")
-
-	resp, err := httpClient.R().SetResult(cart.Cart).Get(cart.Route)
-
-	if err != nil {
-		return fmt.Errorf("error updating cart from remote: %w", err)
-	}
-
-	httpErr := mayReturnErrorForHTTPResponse(resp, "get detailed cart object from magento2-api")
-	if httpErr != nil {
-		return httpErr
-	}
-
-	logger().Debug().Interface("cart", cart.Cart).Msg("Cart updated from remote successfully")
-	return nil
+	_, err := cart.APIClient.v1(context.Background(), http.MethodGet, cart.Route, nil, cart.Cart, "get detailed cart object from magento2-api")
+	return err
 }
 
 func (cart *MCart) AddItems(items []CartItem) error {
 	endpoint := cart.Route + cartItems
-	httpClient := cart.APIClient.HTTPClient
 
 	type PayLoad struct {
 		CartItem CartItem `json:"cartItem"`
@@ -134,35 +94,21 @@ func (cart *MCart) AddItems(items []CartItem) error {
 			CartItem: item,
 		}
 
-		logger().Debug().
-			Str("endpoint", endpoint).
-			Interface("payload", payLoad).
-			Msg("Adding item to cart")
-
-		resp, err := httpClient.R().SetBody(payLoad).Post(endpoint)
-
-		httpErr := mayReturnErrorForHTTPResponse(resp, fmt.Sprintf("add item '%+v' to cart", item))
-		if httpErr != nil && errors.Is(httpErr, ErrNotFound) {
-			customErr := &ItemNotFoundError{ItemID: item.ItemID}
-			return customErr
-		} else if httpErr != nil {
-			return httpErr
-		}
-		if err != nil {
-			return fmt.Errorf("error adding item to cart: %w", err)
+		_, err := cart.APIClient.v1(context.Background(), http.MethodPost, endpoint, payLoad, nil, fmt.Sprintf("add item '%+v' to cart", item))
+		if errors.Is(err, ErrNotFound) {
+			return &ItemNotFoundError{ItemID: item.ItemID}
+		} else if err != nil {
+			return err
 		}
 
 		cart.Cart.Items = append(cart.Cart.Items, item)
-		logger().Debug().Interface("item", item).Msg("Item added to cart successfully")
 	}
 
-	logger().Debug().Msg("All items added to cart successfully")
 	return nil
 }
 
 func (cart *MCart) EstimateShippingCarrier(addr *ShippingAddress) ([]Carrier, error) {
 	endpoint := cart.Route + cartShippingCosts
-	httpClient := cart.APIClient.HTTPClient
 
 	type PayLoad struct {
 		Address ShippingAddress `json:"address"`
@@ -172,36 +118,13 @@ func (cart *MCart) EstimateShippingCarrier(addr *ShippingAddress) ([]Carrier, er
 		Address: *addr,
 	}
 
-	shippingCarrier := &[]Carrier{}
-
-	logger().Debug().
-		Str("endpoint", endpoint).
-		Interface("payload", payLoad).
-		Msg("Estimating shipping carrier for cart")
-
-	resp, err := httpClient.R().SetBody(*payLoad).SetResult(shippingCarrier).Post(endpoint)
-
-	if err != nil {
-		logger().Error().Err(err).Msg("Error estimating shipping carrier")
-		return *shippingCarrier, fmt.Errorf("error estimating shipping carrier: %w", err)
-	}
-
-	logger().Debug().
-		Int("status", resp.StatusCode()).
-		Str("body", resp.String()).
-		Msg("Shipping carrier estimation response from remote")
-
-	httpErr := mayReturnErrorForHTTPResponse(resp, "estimate shipping carrier for cart")
-	if httpErr != nil {
-		return *shippingCarrier, httpErr
-	}
-
-	return *shippingCarrier, nil
+	shippingCarrier := []Carrier{}
+	_, err := cart.APIClient.v1(context.Background(), http.MethodPost, endpoint, payLoad, &shippingCarrier, "estimate shipping carrier for cart")
+	return shippingCarrier, err
 }
 
 func (cart *MCart) AddShippingInformation(addrInfo *AddressInformation) error {
 	endpoint := cart.Route + cartShippingInformation
-	httpClient := cart.APIClient.HTTPClient
 
 	type PayLoad struct {
 		AddressInformation AddressInformation `json:"addressInformation"`
@@ -211,28 +134,8 @@ func (cart *MCart) AddShippingInformation(addrInfo *AddressInformation) error {
 		AddressInformation: *addrInfo,
 	}
 
-	logger().Debug().
-		Str("endpoint", endpoint).
-		Interface("payload", payLoad).
-		Msg("Adding shipping information to cart")
-
-	resp, err := httpClient.R().SetBody(*payLoad).Post(endpoint)
-
-	if err != nil {
-		logger().Error().Err(err).Msg("Error adding shipping information")
-		return fmt.Errorf("error adding shipping information to cart: %w", err)
-	}
-
-	logger().Debug().
-		Int("status", resp.StatusCode()).
-		Str("body", resp.String()).
-		Msg("Shipping information added response from remote")
-
-	httpErr := mayReturnErrorForHTTPResponse(resp, "add shipping information to cart")
-	if httpErr != nil {
-		return httpErr
-	}
-	return nil
+	_, err := cart.APIClient.v1(context.Background(), http.MethodPost, endpoint, payLoad, nil, "add shipping information to cart")
+	return err
 }
 
 func (cart *MCart) EstimatePaymentMethods() ([]PaymentMethod, error) {
@@ -240,18 +143,15 @@ func (cart *MCart) EstimatePaymentMethods() ([]PaymentMethod, error) {
 
 	paymentMethods := &[]PaymentMethod{}
 
-	logger().Debug().Str("endpoint", endpoint).Msg("Estimating payment methods for cart")
 	err := cart.APIClient.GetRouteAndDecode(endpoint, paymentMethods, "estimate payment methods for cart")
 	if err != nil {
 		return *paymentMethods, fmt.Errorf("error estimating payment methods: %w", err)
 	}
-	logger().Debug().Interface("paymentMethods", paymentMethods).Msg("Payment methods estimated successfully")
 	return *paymentMethods, nil
 }
 
 func (cart *MCart) CreateOrder(paymentMethod PaymentMethod) (*MOrder, error) {
 	endpoint := cart.Route + cartPlaceOrder
-	httpClient := cart.APIClient.HTTPClient
 
 	type PayLoad struct {
 		PaymentMethod PaymentMethodCode `json:"paymentMethod"`
@@ -263,29 +163,17 @@ func (cart *MCart) CreateOrder(paymentMethod PaymentMethod) (*MOrder, error) {
 		},
 	}
 
-	logger().Debug().
-		Str("endpoint", endpoint).
-		Interface("payload", payLoad).
-		Msg("Creating order for cart")
-
-	resp, err := httpClient.R().SetBody(payLoad).Put(endpoint)
-
+	body, err := cart.APIClient.v1(context.Background(), http.MethodPut, endpoint, payLoad, nil, "create order")
 	if err != nil {
-		return nil, fmt.Errorf("error creating order: %w", err)
+		return nil, err
 	}
 
-	httpErr := mayReturnErrorForHTTPResponse(resp, "create order")
-	if httpErr != nil {
-		return nil, httpErr
-	}
-
-	orderIDString := mayTrimSurroundingQuotes(resp.String())
+	orderIDString := mayTrimSurroundingQuotes(string(body))
 	orderIDInt, err := strconv.Atoi(orderIDString)
 	if err != nil {
 		return nil, fmt.Errorf("unexpected error while extracting orderID: %w", err)
 	}
 
-	logger().Debug().Int("orderID", orderIDInt).Msg("Order created successfully")
 	return &MOrder{
 		Route: Orders + "/" + orderIDString,
 		Order: &Order{
@@ -297,22 +185,8 @@ func (cart *MCart) CreateOrder(paymentMethod PaymentMethod) (*MOrder, error) {
 
 func (cart *MCart) DeleteItem(itemID int) error {
 	endpoint := cart.Route + cartItems + "/" + strconv.Itoa(itemID)
-	httpClient := cart.APIClient.HTTPClient
-
-	logger().Debug().Str("endpoint", endpoint).Int("itemID", itemID).Msg("Deleting item from cart")
-	resp, err := httpClient.R().Delete(endpoint)
-
-	if err != nil {
-		return fmt.Errorf("error deleting item from cart: %w", err)
-	}
-
-	httpErr := mayReturnErrorForHTTPResponse(resp, fmt.Sprintf("delete itemID '%d'", itemID))
-	if httpErr != nil {
-		return httpErr
-	}
-
-	logger().Debug().Int("itemID", itemID).Msg("Item deleted from cart successfully")
-	return nil
+	_, err := cart.APIClient.v1(context.Background(), http.MethodDelete, endpoint, nil, nil, fmt.Sprintf("delete itemID '%d'", itemID))
+	return err
 }
 
 func (cart *MCart) DeleteAllItems() error {
@@ -328,6 +202,5 @@ func (cart *MCart) DeleteAllItems() error {
 		}
 	}
 
-	logger().Debug().Msg("All items deleted from cart successfully")
 	return nil
 }

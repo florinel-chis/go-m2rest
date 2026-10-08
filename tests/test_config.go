@@ -3,15 +3,15 @@ package magento2
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
+	"testing"
 	"time"
 
 	magento2 "github.com/florinel-chis/go-m2rest"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
 // TestConfig holds configuration for functional tests
@@ -28,7 +28,6 @@ type TestConfig struct {
 // DefaultTestConfig returns default test configuration
 func DefaultTestConfig() *TestConfig {
 	return &TestConfig{
-		Host:       "http://localhost",
 		StoreCode:  "default",
 		APIVersion: "V1",
 		RestPrefix: "/rest",
@@ -74,7 +73,11 @@ func LoadTestConfigFromEnv() (*TestConfig, error) {
 		}
 	}
 
-	// Validate required fields
+	// Validate required fields. There is deliberately no default host: live
+	// tests only ever run against a store the caller names explicitly.
+	if config.Host == "" {
+		return nil, fmt.Errorf("MAGENTO_HOST is required")
+	}
 	if config.BearerToken == "" {
 		return nil, fmt.Errorf("MAGENTO_BEARER_TOKEN is required")
 	}
@@ -101,6 +104,21 @@ func (tc *TestConfig) CreateStoreConfig() (*magento2.StoreConfig, error) {
 	}, nil
 }
 
+// allowWritesEnv names the variable that enables tests which create, modify
+// or delete data on the live store.
+const allowWritesEnv = "MAGENTO_TEST_ALLOW_WRITES"
+
+// skipWithoutWrites skips a test that writes to the live store unless
+// MAGENTO_TEST_ALLOW_WRITES=1 is set. Run write tests only against a
+// disposable store.
+func skipWithoutWrites(t *testing.T) {
+	t.Helper()
+	loadDotEnv()
+	if os.Getenv(allowWritesEnv) != "1" {
+		t.Skip(allowWritesEnv + "=1 not set; skipping test that writes to the store")
+	}
+}
+
 // SetupTestClient creates a configured API client for testing
 func SetupTestClient() (*magento2.Client, *TestConfig, error) {
 	// Try to load .env file if it exists
@@ -111,30 +129,22 @@ func SetupTestClient() (*magento2.Client, *TestConfig, error) {
 		return nil, nil, fmt.Errorf("failed to load test config: %w", err)
 	}
 
-	// Configure logging
-	if config.Debug {
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	} else {
-		zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	}
-
 	// Create store config
 	storeConfig, err := config.CreateStoreConfig()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create store config: %w", err)
 	}
 
-	// Create API client
-	client, err := magento2.NewAPIClientFromIntegration(storeConfig, config.BearerToken)
+	// Create API client; TEST_DEBUG=true logs one line per request
+	// (method, path, status) to stderr.
+	var opts []magento2.ClientOption
+	if config.Debug {
+		opts = append(opts, magento2.WithLogger(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))))
+	}
+	client, err := magento2.NewAPIClientFromIntegration(storeConfig, config.BearerToken, opts...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create API client: %w", err)
 	}
-
-	log.Info().
-		Str("host", config.Host).
-		Str("storeCode", config.StoreCode).
-		Bool("debug", config.Debug).
-		Msg("Test client configured")
 
 	return client, config, nil
 }

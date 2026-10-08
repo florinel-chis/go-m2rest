@@ -4,10 +4,10 @@ import (
 	"testing"
 
 	magento2 "github.com/florinel-chis/go-m2rest"
-	"github.com/rs/zerolog/log"
 )
 
 func TestCartDebug_UseExistingProduct(t *testing.T) {
+	skipWithoutWrites(t)
 	skipWithoutMagentoHost(t)
 	client, _, err := SetupTestClient()
 	if err != nil {
@@ -20,7 +20,7 @@ func TestCartDebug_UseExistingProduct(t *testing.T) {
 		t.Fatalf("Failed to create guest cart: %v", err)
 	}
 
-	log.Info().Str("cartID", guestCart.QuoteID).Msg("Testing with existing products")
+	t.Logf("Testing with existing products cartID=%v", guestCart.QuoteID)
 
 	// Try with some common/existing SKUs that might exist in the system
 	testSKUs := []string{

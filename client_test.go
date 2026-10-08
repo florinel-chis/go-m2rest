@@ -34,52 +34,168 @@ func newTestClient(t *testing.T, handler http.Handler) *Client {
 
 func TestBaseURLBuilding(t *testing.T) {
 	tests := []struct {
-		name   string
-		config StoreConfig
-		want   string
+		name    string
+		config  StoreConfig
+		want    string // StoreConfig.baseURL()
+		wantURL string // URL requested for the compat route "/products"
 	}{
 		{
-			name:   "plain host",
-			config: StoreConfig{Scheme: "https", HostName: "shop.example.com", StoreCode: "default"},
-			want:   "https://shop.example.com/rest/default/V1",
+			name:    "plain host",
+			config:  StoreConfig{Scheme: "https", HostName: "shop.example.com", StoreCode: "default"},
+			want:    "https://shop.example.com/rest/default/V1",
+			wantURL: "https://shop.example.com/rest/default/V1/products",
 		},
 		{
-			name:   "host with port",
-			config: StoreConfig{Scheme: "http", HostName: "localhost:8080", StoreCode: "default"},
-			want:   "http://localhost:8080/rest/default/V1",
+			name:    "empty store code sends no segment",
+			config:  StoreConfig{Scheme: "https", HostName: "shop.example.com"},
+			want:    "https://shop.example.com/rest/V1",
+			wantURL: "https://shop.example.com/rest/V1/products",
 		},
 		{
-			name:   "base path",
-			config: StoreConfig{Scheme: "https", HostName: "example.com", StoreCode: "de", BasePath: "shop"},
-			want:   "https://example.com/shop/rest/de/V1",
+			name:    "host with port",
+			config:  StoreConfig{Scheme: "http", HostName: "localhost:8080", StoreCode: "default"},
+			want:    "http://localhost:8080/rest/default/V1",
+			wantURL: "http://localhost:8080/rest/default/V1/products",
 		},
 		{
-			name:   "base path with surrounding slashes",
-			config: StoreConfig{Scheme: "https", HostName: "example.com", StoreCode: "default", BasePath: "/shop/"},
-			want:   "https://example.com/shop/rest/default/V1",
+			name:    "base path",
+			config:  StoreConfig{Scheme: "https", HostName: "example.com", StoreCode: "de", BasePath: "shop"},
+			want:    "https://example.com/shop/rest/de/V1",
+			wantURL: "https://example.com/shop/rest/de/V1/products",
 		},
 		{
-			name:   "multi-segment base path and port",
-			config: StoreConfig{Scheme: "http", HostName: "example.com:8443", StoreCode: "default", BasePath: "sub/dir"},
-			want:   "http://example.com:8443/sub/dir/rest/default/V1",
+			name:    "base path with surrounding slashes",
+			config:  StoreConfig{Scheme: "https", HostName: "example.com", StoreCode: "default", BasePath: "/shop/"},
+			want:    "https://example.com/shop/rest/default/V1",
+			wantURL: "https://example.com/shop/rest/default/V1/products",
+		},
+		{
+			name:    "multi-segment base path and port",
+			config:  StoreConfig{Scheme: "http", HostName: "example.com:8443", StoreCode: "default", BasePath: "sub/dir"},
+			want:    "http://example.com:8443/sub/dir/rest/default/V1",
+			wantURL: "http://example.com:8443/sub/dir/rest/default/V1/products",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := NewAPIClientWithoutAuthentication(&tt.config)
-			if got := client.HTTPClient.BaseURL; got != tt.want {
+			if got := tt.config.baseURL(); got != tt.want {
 				t.Errorf("base URL = %q, want %q", got, tt.want)
+			}
+			// The (unexported) baseURL is only a description; what counts is
+			// the URL the compat helpers actually request.
+			rt := &recordingRT{}
+			client := NewAPIClientWithoutAuthentication(&tt.config, WithHTTPClient(&http.Client{Transport: rt}))
+			var target map[string]any
+			if err := client.GetRouteAndDecodeCtx(context.Background(), "/products", &target, "base url test"); err != nil {
+				t.Fatalf("GetRouteAndDecodeCtx: %v", err)
+			}
+			if got := rt.last().URL.String(); got != tt.wantURL {
+				t.Errorf("requested URL = %q, want %q", got, tt.wantURL)
+			}
+		})
+	}
+}
+
+// An invalid StoreConfig cannot fail NewAPIClientWithoutAuthentication (its
+// signature has no error); the error surfaces on the first request instead.
+func TestCompatConstructorInvalidConfigFailsOnUse(t *testing.T) {
+	client := NewAPIClientWithoutAuthentication(&StoreConfig{Scheme: "ftp", HostName: "example.com", StoreCode: "default"})
+	var target map[string]any
+	if err := client.GetRouteAndDecodeCtx(context.Background(), "/products", &target, "x"); err == nil {
+		t.Fatal("want an error from a client built from an invalid StoreConfig")
+	}
+	if _, err := NewAPIClientFromIntegration(&StoreConfig{Scheme: "ftp", HostName: "example.com"}, "tok"); err == nil {
+		t.Fatal("NewAPIClientFromIntegration accepted an invalid StoreConfig")
+	}
+}
+
+func TestCompatRouteWithQuery(t *testing.T) {
+	rt := &recordingRT{}
+	client := NewAPIClientWithoutAuthentication(&StoreConfig{Scheme: "https", HostName: "shop.example", StoreCode: "default"}, WithHTTPClient(&http.Client{Transport: rt}))
+	var target map[string]any
+	route := "/orders?" + BuildSearchQuery("increment_id", "0001", "eq")
+	if err := client.GetRouteAndDecodeCtx(context.Background(), route, &target, "x"); err != nil {
+		t.Fatal(err)
+	}
+	got := rt.last().URL
+	if got.Path != "/rest/default/V1/orders" || got.Query().Get("searchCriteria[filter_groups][0][filters][0][value]") != "0001" {
+		t.Fatalf("requested %s", got)
+	}
+	if err := client.GetRouteAndDecodeCtx(context.Background(), "/orders", target, "x"); !errors.Is(err, ErrNoPointer) {
+		t.Fatalf("non-pointer target = %v, want ErrNoPointer", err)
+	}
+	if err := client.GetRouteAndDecodeCtx(context.Background(), "/orders", nil, "x"); !errors.Is(err, ErrNoPointer) {
+		t.Fatalf("nil target = %v, want ErrNoPointer", err)
+	}
+}
+
+func TestNewAPIClientFromIntegrationSendsToken(t *testing.T) {
+	rt := &recordingRT{}
+	client, err := NewAPIClientFromIntegration(&StoreConfig{Scheme: "https", HostName: "shop.example", StoreCode: "default"}, "integration-token", WithHTTPClient(&http.Client{Transport: rt}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := GetStoreViews(context.Background(), client); err == nil {
+		// "{}" does not decode into a slice; only the header matters here.
+		t.Log("decoded")
+	}
+	if got := rt.last().Header.Get("Authorization"); got != "Bearer integration-token" {
+		t.Fatalf("Authorization = %q", got)
+	}
+}
+
+func TestNewAPIClientFromAuthentication(t *testing.T) {
+	tests := []struct {
+		name     string
+		authType AuthenticationType
+		wantPath string
+		status   int
+		wantErr  bool
+	}{
+		{name: "admin", authType: Administrator, wantPath: "/rest/default/V1/integration/admin/token", status: 200},
+		{name: "customer", authType: CustomerAuth, wantPath: "/rest/default/V1/integration/customer/token", status: 200},
+		{name: "refused", authType: Administrator, wantPath: "/rest/default/V1/integration/admin/token", status: 401, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rt := &recordingRT{respond: func(r *http.Request) (*http.Response, error) {
+				if r.URL.Path == tt.wantPath {
+					if tt.status != 200 {
+						return textResponse(r, tt.status, `{"message":"The account sign-in was incorrect."}`), nil
+					}
+					return textResponse(r, 200, `"issued-token"`), nil
+				}
+				return textResponse(r, 200, `[]`), nil
+			}}
+			cfg := &StoreConfig{Scheme: "https", HostName: "shop.example", StoreCode: "default"}
+			client, err := NewAPIClientFromAuthentication(cfg, AuthenticationRequestPayload{Username: "u", Password: "p"}, tt.authType, WithHTTPClient(&http.Client{Transport: rt}))
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("want an error for a refused authentication")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rt.last().Method != http.MethodPost || rt.last().Header.Get("Authorization") != "" {
+				t.Fatalf("token request = %s %s", rt.last().Method, rt.last().Header)
+			}
+			if string(rt.bodies[0]) != `{"username":"u","password":"p"}` {
+				t.Fatalf("payload = %s", rt.bodies[0])
+			}
+			if _, err := GetStoreViews(context.Background(), client); err != nil {
+				t.Fatal(err)
+			}
+			if got := rt.last().Header.Get("Authorization"); got != "Bearer issued-token" {
+				t.Fatalf("Authorization = %q", got)
 			}
 		})
 	}
 }
 
 func TestDefaultTimeoutAndSetTimeout(t *testing.T) {
-	client := NewAPIClientWithoutAuthentication(&StoreConfig{Scheme: "http", HostName: "example.com", StoreCode: "default"})
-	if got := client.HTTPClient.GetClient().Timeout; got != DefaultTimeout {
-		t.Errorf("default timeout = %v, want %v", got, DefaultTimeout)
-	}
 	// SetTimeout must actually bound request duration: against a server
 	// slower than the configured timeout the request fails promptly instead
 	// of blocking (retries disabled — a timed-out attempt is a transport
@@ -168,7 +284,7 @@ func TestRetriesExhaustedReturnsAPIError(t *testing.T) {
 	if apiErr.StatusCode != http.StatusInternalServerError {
 		t.Errorf("APIError.StatusCode = %d, want 500", apiErr.StatusCode)
 	}
-	if !strings.Contains(apiErr.Body, "boom") {
+	if !strings.Contains(string(apiErr.Body), "boom") {
 		t.Errorf("APIError.Body = %q, want it to contain the response body", apiErr.Body)
 	}
 	if !errors.Is(err, ErrBadRequest) {
@@ -177,7 +293,7 @@ func TestRetriesExhaustedReturnsAPIError(t *testing.T) {
 }
 
 func TestNotFoundErrorSentinelAndAPIError(t *testing.T) {
-	longBody := strings.Repeat("x", 1000)
+	longBody := strings.Repeat("x", 2*defaultErrorBodyBytes)
 	var attempts int32
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&attempts, 1)
@@ -203,11 +319,11 @@ func TestNotFoundErrorSentinelAndAPIError(t *testing.T) {
 	if apiErr.StatusCode != http.StatusNotFound {
 		t.Errorf("APIError.StatusCode = %d, want 404", apiErr.StatusCode)
 	}
-	if len(apiErr.Body) != maxErrorBodyBytes {
-		t.Errorf("APIError.Body length = %d, want truncated to %d", len(apiErr.Body), maxErrorBodyBytes)
+	if len(apiErr.Body) != defaultErrorBodyBytes {
+		t.Errorf("APIError.Body length = %d, want truncated to %d", len(apiErr.Body), defaultErrorBodyBytes)
 	}
-	if apiErr.Endpoint == "" || !strings.Contains(apiErr.Endpoint, "/products") {
-		t.Errorf("APIError.Endpoint = %q, want it to reference the endpoint", apiErr.Endpoint)
+	if apiErr.Method != http.MethodGet || apiErr.Path != "/V1/products" {
+		t.Errorf("APIError Method/Path = %q %q, want GET /V1/products", apiErr.Method, apiErr.Path)
 	}
 }
 
