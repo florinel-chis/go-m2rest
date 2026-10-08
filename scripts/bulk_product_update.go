@@ -5,13 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"strconv"
 	"sync"
 	"time"
 
 	magento2 "github.com/florinel-chis/go-m2rest"
-	"github.com/rs/zerolog"
 )
 
 type StockUpdate struct {
@@ -31,14 +31,13 @@ func main() {
 	flag.Parse()
 
 	// Setup logging
-	zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	output := zerolog.ConsoleWriter{Out: os.Stderr}
-	logger := zerolog.New(output).With().Timestamp().Logger()
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
 	// Load configuration
 	config, err := loadConfig()
 	if err != nil {
-		logger.Fatal().Err(err).Msg("Failed to load configuration")
+		logger.Error("Failed to load configuration", "error", err)
+		os.Exit(1)
 	}
 
 	// Create Magento client
@@ -50,37 +49,39 @@ func main() {
 
 	client, err := magento2.NewAPIClientFromIntegration(storeConfig, config.BearerToken)
 	if err != nil {
-		logger.Fatal().Err(err).Msg("Failed to create API client")
+		logger.Error("Failed to create API client", "error", err)
+		os.Exit(1)
 	}
 
 	// Create products if requested
 	if !*updateOnly {
-		logger.Info().Int("count", *productCount).Msg("Creating simple products")
-		createdSKUs := createBulkProducts(client, *productCount, *concurrent, &logger)
+		logger.Info("Creating simple products", "count", *productCount)
+		createdSKUs := createBulkProducts(client, *productCount, *concurrent, logger)
 
 		// Save created SKUs to CSV if we're only creating
 		if *createOnly {
 			if err := saveCreatedSKUsToCSV(*csvFile, createdSKUs); err != nil {
-				logger.Error().Err(err).Msg("Failed to save SKUs to CSV")
+				logger.Error("Failed to save SKUs to CSV", "error", err)
 			}
-			logger.Info().Str("file", *csvFile).Msg("Created SKUs saved to CSV")
+			logger.Info("Created SKUs saved to CSV", "file", *csvFile)
 			return
 		}
 	}
 
 	// Update stock from CSV
 	if !*createOnly {
-		logger.Info().Str("file", *csvFile).Msg("Loading stock updates from CSV")
+		logger.Info("Loading stock updates from CSV", "file", *csvFile)
 		updates, err := loadStockUpdatesFromCSV(*csvFile)
 		if err != nil {
-			logger.Fatal().Err(err).Msg("Failed to load stock updates")
+			logger.Error("Failed to load stock updates", "error", err)
+			os.Exit(1)
 		}
 
-		logger.Info().Int("count", len(updates)).Msg("Updating product stock")
-		updateBulkStock(client, updates, *concurrent, &logger)
+		logger.Info("Updating product stock", "count", len(updates))
+		updateBulkStock(client, updates, *concurrent, logger)
 	}
 
-	logger.Info().Msg("Bulk operations completed")
+	logger.Info("Bulk operations completed")
 }
 
 func loadConfig() (*Config, error) {
@@ -124,7 +125,7 @@ type Config struct {
 	BearerToken string
 }
 
-func createBulkProducts(client *magento2.Client, count int, concurrent int, logger *zerolog.Logger) []string {
+func createBulkProducts(client *magento2.Client, count int, concurrent int, logger *slog.Logger) []string {
 	timestamp := time.Now().Unix()
 	products := make([]magento2.Product, count)
 	skus := make([]string, count)
@@ -159,17 +160,12 @@ func createBulkProducts(client *magento2.Client, count int, concurrent int, logg
 
 			mProduct, err := magento2.CreateOrReplaceProduct(&p, true, client)
 			if err != nil {
-				logger.Error().Err(err).Str("sku", p.Sku).Msg("Failed to create product")
+				logger.Error("Failed to create product", "error", err, "sku", p.Sku)
 				errors <- err
 				return
 			}
 
-			logger.Info().
-				Str("sku", mProduct.Product.Sku).
-				Int("id", mProduct.Product.ID).
-				Int("progress", idx+1).
-				Int("total", count).
-				Msg("Product created")
+			logger.Info("Product created", "sku", mProduct.Product.Sku, "id", mProduct.Product.ID, "progress", idx+1, "total", count)
 		}(i, product)
 	}
 
@@ -182,15 +178,12 @@ func createBulkProducts(client *magento2.Client, count int, concurrent int, logg
 		errorCount++
 	}
 
-	logger.Info().
-		Int("created", count-errorCount).
-		Int("failed", errorCount).
-		Msg("Product creation completed")
+	logger.Info("Product creation completed", "created", count-errorCount, "failed", errorCount)
 
 	return skus
 }
 
-func updateBulkStock(client *magento2.Client, updates []StockUpdate, concurrent int, logger *zerolog.Logger) {
+func updateBulkStock(client *magento2.Client, updates []StockUpdate, concurrent int, logger *slog.Logger) {
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, concurrent)
 	errors := make(chan error, len(updates))
@@ -205,7 +198,7 @@ func updateBulkStock(client *magento2.Client, updates []StockUpdate, concurrent 
 			// First, get the product to find stock item ID
 			product, err := magento2.GetProductBySKU(u.SKU, client)
 			if err != nil {
-				logger.Error().Err(err).Str("sku", u.SKU).Msg("Failed to get product")
+				logger.Error("Failed to get product", "error", err, "sku", u.SKU)
 				errors <- err
 				return
 			}
@@ -218,24 +211,19 @@ func updateBulkStock(client *magento2.Client, updates []StockUpdate, concurrent 
 							stockItemID := fmt.Sprintf("%v", itemID)
 							err = product.UpdateQuantityForStockItem(stockItemID, int(u.Qty), true)
 							if err != nil {
-								logger.Error().Err(err).Str("sku", u.SKU).Msg("Failed to update stock")
+								logger.Error("Failed to update stock", "error", err, "sku", u.SKU)
 								errors <- err
 								return
 							}
 
-							logger.Info().
-								Str("sku", u.SKU).
-								Float64("qty", u.Qty).
-								Int("progress", idx+1).
-								Int("total", len(updates)).
-								Msg("Stock updated")
+							logger.Info("Stock updated", "sku", u.SKU, "qty", u.Qty, "progress", idx+1, "total", len(updates))
 							return
 						}
 					}
 				}
 			}
 
-			logger.Error().Str("sku", u.SKU).Msg("Could not find stock item ID")
+			logger.Error("Could not find stock item ID", "sku", u.SKU)
 			errors <- fmt.Errorf("no stock item ID for SKU %s", u.SKU)
 		}(i, update)
 	}
@@ -249,10 +237,7 @@ func updateBulkStock(client *magento2.Client, updates []StockUpdate, concurrent 
 		errorCount++
 	}
 
-	logger.Info().
-		Int("updated", len(updates)-errorCount).
-		Int("failed", errorCount).
-		Msg("Stock update completed")
+	logger.Info("Stock update completed", "updated", len(updates)-errorCount, "failed", errorCount)
 }
 
 func loadStockUpdatesFromCSV(filename string) ([]StockUpdate, error) {

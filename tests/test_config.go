@@ -3,6 +3,7 @@ package magento2
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"net/url"
 	"os"
 	"strconv"
@@ -11,8 +12,6 @@ import (
 	"time"
 
 	magento2 "github.com/florinel-chis/go-m2rest"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
 // TestConfig holds configuration for functional tests
@@ -130,30 +129,22 @@ func SetupTestClient() (*magento2.Client, *TestConfig, error) {
 		return nil, nil, fmt.Errorf("failed to load test config: %w", err)
 	}
 
-	// Configure logging
-	if config.Debug {
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	} else {
-		zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	}
-
 	// Create store config
 	storeConfig, err := config.CreateStoreConfig()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create store config: %w", err)
 	}
 
-	// Create API client
-	client, err := magento2.NewAPIClientFromIntegration(storeConfig, config.BearerToken)
+	// Create API client; TEST_DEBUG=true logs one line per request
+	// (method, path, status) to stderr.
+	var opts []magento2.ClientOption
+	if config.Debug {
+		opts = append(opts, magento2.WithLogger(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))))
+	}
+	client, err := magento2.NewAPIClientFromIntegration(storeConfig, config.BearerToken, opts...)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create API client: %w", err)
 	}
-
-	log.Info().
-		Str("host", config.Host).
-		Str("storeCode", config.StoreCode).
-		Bool("debug", config.Debug).
-		Msg("Test client configured")
 
 	return client, config, nil
 }

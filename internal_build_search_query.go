@@ -3,6 +3,7 @@ package magento2
 import (
 	"fmt"
 	"net/url"
+	"strings"
 )
 
 const (
@@ -32,6 +33,10 @@ type Fields struct {
 	Value string
 }
 
+// searchCriteriaKey turns a template result into a query key: the templates
+// end in "=", which must not become part of the key.
+func searchCriteriaKey(s string) string { return strings.TrimSuffix(s, "=") }
+
 func searchCriteriaField(filterGroups, filters int) string {
 	return fmt.Sprintf(searchCriteriaFieldTemplate, filterGroups, filters)
 }
@@ -47,15 +52,11 @@ func searchCriteriaConditionType(filterGroups, filters int) string {
 // use this method for building simple search queries without any flexibility
 func BuildSearchQuery(field, value, conditionType string) string {
 	params := url.Values{}
-	params.Add(searchCriteriaField(0, 0), field)
-	params.Add(searchCriteriaValue(0, 0), value)
-	params.Add(searchCriteriaConditionType(0, 0), conditionType)
+	params.Add(searchCriteriaKey(searchCriteriaField(0, 0)), field)
+	params.Add(searchCriteriaKey(searchCriteriaValue(0, 0)), value)
+	params.Add(searchCriteriaKey(searchCriteriaConditionType(0, 0)), conditionType)
 
-	queryString := params.Encode()
-	logger().Debug().
-		Str("query", queryString).
-		Msg("Built simple search query")
-	return queryString
+	return params.Encode()
 }
 
 // this method is used to build very flexible search-queries
@@ -69,24 +70,24 @@ func BuildFlexibleSearchQuery(criteria []SearchQueryCriteria, additionalQuery ..
 	for i := range criteria {
 		for y := range criteria[i].Fields {
 			params.Add(
-				searchCriteriaField(
+				searchCriteriaKey(searchCriteriaField(
 					criteria[i].Fields[y].Field.FilterGroups,
 					criteria[i].Fields[y].Field.Filters,
-				),
+				)),
 				criteria[i].Fields[y].Field.FilterFor,
 			)
 			params.Add(
-				searchCriteriaValue(
+				searchCriteriaKey(searchCriteriaValue(
 					criteria[i].Fields[y].Value.FilterGroups,
 					criteria[i].Fields[y].Value.Filters,
-				),
+				)),
 				criteria[i].Fields[y].Value.FilterFor,
 			)
 			params.Add(
-				searchCriteriaConditionType(
+				searchCriteriaKey(searchCriteriaConditionType(
 					criteria[i].Fields[y].ConditionType.FilterGroups,
 					criteria[i].Fields[y].ConditionType.Filters,
-				),
+				)),
 				criteria[i].Fields[y].ConditionType.FilterFor,
 			)
 		}
@@ -96,11 +97,5 @@ func BuildFlexibleSearchQuery(criteria []SearchQueryCriteria, additionalQuery ..
 		params.Add(additionalQuery[i].Key, additionalQuery[i].Value)
 	}
 
-	queryString := params.Encode()
-	logger().Debug().
-		Str("query", queryString).
-		Interface("criteria", criteria).               // Log criteria for complex queries
-		Interface("additionalQuery", additionalQuery). // Log additional query parameters
-		Msg("Built flexible search query")
-	return queryString
+	return params.Encode()
 }

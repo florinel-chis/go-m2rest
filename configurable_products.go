@@ -1,7 +1,10 @@
 package magento2
 
 import (
+	"context"
 	"fmt"
+	"net/http"
+	"net/url"
 )
 
 type MConfigurableProduct struct {
@@ -12,35 +15,21 @@ type MConfigurableProduct struct {
 
 func SetOptionForExistingConfigurableProduct(sku string, o *ConfigurableProductOption, apiClient *Client) (*MConfigurableProduct, error) {
 	mConfigurableProduct := &MConfigurableProduct{
-		Route:     configurableProducts + "/" + sku,
+		Route:     configurableProducts + "/" + url.PathEscape(sku),
 		Options:   &[]Option{},
 		APIClient: apiClient,
 	}
 	endpoint := mConfigurableProduct.Route + "/" + configurableProductsOptionsRelative
-	httpClient := apiClient.HTTPClient
 
 	payLoad := createConfigurableProductByOptionPayload{
 		Option: *o,
 	}
 
-	logger().Debug().
-		Str("sku", sku).
-		Str("endpoint", endpoint).
-		Interface("payload", payLoad).
-		Msg("Setting option for configurable product")
-
-	resp, err := httpClient.R().SetBody(payLoad).Post(endpoint)
-
-	if err != nil {
-		return mConfigurableProduct, fmt.Errorf("error setting option for configurable product: %w", err)
+	if _, err := apiClient.v1(context.Background(), http.MethodPost, endpoint, payLoad, nil, "create configurable product option"); err != nil {
+		return mConfigurableProduct, err
 	}
 
-	httpErr := mayReturnErrorForHTTPResponse(resp, "create configurable product option")
-	if httpErr != nil {
-		return mConfigurableProduct, httpErr
-	}
-
-	err = mConfigurableProduct.UpdateOptionsFromRemote()
+	err := mConfigurableProduct.UpdateOptionsFromRemote()
 	if err != nil {
 		return mConfigurableProduct, fmt.Errorf("error updating options from remote after setting option: %w", err)
 	}
@@ -49,62 +38,27 @@ func SetOptionForExistingConfigurableProduct(sku string, o *ConfigurableProductO
 }
 
 func (mConfigurableProduct *MConfigurableProduct) UpdateOptionsFromRemote() error {
-	httpClient := mConfigurableProduct.APIClient.HTTPClient
 	optionsRoute := mConfigurableProduct.Route + "/" + configurableProductsOptionsAllRelative
-
-	logger().Debug().
-		Str("route", optionsRoute).
-		Msg("Updating options for configurable product from remote")
-
-	resp, err := httpClient.R().SetResult(mConfigurableProduct.Options).Get(optionsRoute)
-
-	if err != nil {
-		logger().Error().Err(err).Msg("Error updating options for configurable product from remote")
-		return fmt.Errorf("error getting options for configurable product from remote: %w", err)
-	}
-
-	httpErr := mayReturnErrorForHTTPResponse(resp, "get options for configurable product from remote")
-	if httpErr != nil {
-		return httpErr
-	}
-	return nil
+	_, err := mConfigurableProduct.APIClient.v1(context.Background(), http.MethodGet, optionsRoute, nil, mConfigurableProduct.Options, "get options for configurable product from remote")
+	return err
 }
 
 func (mConfigurableProduct *MConfigurableProduct) AddChildBySKU(sku string) error {
-	httpClient := mConfigurableProduct.APIClient.HTTPClient
 	payLoad := addChildSKUPayload{
 		Sku: sku,
 	}
 
 	endpoint := fmt.Sprintf("%s/%s", mConfigurableProduct.Route, configurableProductsChildRelative)
-
-	logger().Debug().
-		Str("sku", sku).
-		Str("endpoint", endpoint).
-		Interface("payload", payLoad).
-		Msg("Adding child SKU to configurable product")
-
-	resp, err := httpClient.R().SetBody(payLoad).Post(endpoint)
-
-	if err != nil {
-		return fmt.Errorf("error adding child SKU to configurable product: %w", err)
-	}
-
-	httpErr := mayReturnErrorForHTTPResponse(resp, "add child by sku to configurable product")
-	if httpErr != nil {
-		return httpErr
-	}
-	return nil
+	_, err := mConfigurableProduct.APIClient.v1(context.Background(), http.MethodPost, endpoint, payLoad, nil, "add child by sku to configurable product")
+	return err
 }
 
 func GetConfigurableProductBySKU(sku string, apiClient *Client) (*MConfigurableProduct, error) {
 	mConfigurableProduct := &MConfigurableProduct{
-		Route:     configurableProducts + "/" + sku,
+		Route:     configurableProducts + "/" + url.PathEscape(sku),
 		Options:   &[]Option{},
 		APIClient: apiClient,
 	}
-
-	logger().Debug().Str("sku", sku).Msg("Getting configurable product by SKU")
 
 	err := mConfigurableProduct.UpdateOptionsFromRemote()
 	if err != nil {
@@ -114,31 +68,17 @@ func GetConfigurableProductBySKU(sku string, apiClient *Client) (*MConfigurableP
 }
 
 func (mConfigurableProduct *MConfigurableProduct) UpdateOptionByID(o *ConfigurableProductOption) error {
-	httpClient := mConfigurableProduct.APIClient.HTTPClient
 	endpoint := fmt.Sprintf("%s/%s/%d", mConfigurableProduct.Route, configurableProductsOptionsRelative, o.ID)
 
 	payLoad := createConfigurableProductByOptionPayload{
 		Option: *o,
 	}
 
-	logger().Debug().
-		Int("optionID", o.ID).
-		Str("endpoint", endpoint).
-		Interface("payload", payLoad).
-		Msg("Updating option by ID for configurable product")
-
-	resp, err := httpClient.R().SetBody(payLoad).Put(endpoint)
-
-	if err != nil {
-		return fmt.Errorf("error updating option by ID for configurable product: %w", err)
+	if _, err := mConfigurableProduct.APIClient.v1(context.Background(), http.MethodPut, endpoint, payLoad, nil, "update option for configurable product"); err != nil {
+		return err
 	}
 
-	httpErr := mayReturnErrorForHTTPResponse(resp, "update option for configurable product")
-	if httpErr != nil {
-		return httpErr
-	}
-
-	err = mConfigurableProduct.UpdateOptionsFromRemote()
+	err := mConfigurableProduct.UpdateOptionsFromRemote()
 	if err != nil {
 		return fmt.Errorf("error updating options from remote after updating option by ID: %w", err)
 	}
