@@ -619,6 +619,55 @@ func TestAllowedMethods(t *testing.T) {
 	}
 }
 
+// Request.Method is canonicalised once: upper-cased for the allowlist, the
+// retry decision and the wire; a method that is not a token is refused
+// before anything is built.
+func TestMethodCanonicalisation(t *testing.T) {
+	tests := []struct {
+		name     string
+		allowed  []string
+		method   string
+		statuses []int
+		wantWire string // "" = refused
+		wantReqs int
+	}{
+		{name: "lower-case get allowed and sent as GET", allowed: []string{"GET"}, method: "get", statuses: []int{200}, wantWire: "GET", wantReqs: 1},
+		{name: "mixed case without allowlist", method: "Delete", statuses: []int{200}, wantWire: "DELETE", wantReqs: 1},
+		{name: "lower-case get is retryable", method: "get", statuses: []int{503, 200}, wantWire: "GET", wantReqs: 2},
+		{name: "lower-case post is not retried", method: "post", statuses: []int{503}, wantWire: "POST", wantReqs: 1},
+		{name: "not a token", method: "po st"},
+		{name: "not a token with allowlist", allowed: []string{"GET"}, method: "GE\nT"},
+		{name: "path in method", method: "GET /x"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var n atomic.Int32
+			rt := &recordingRT{respond: func(r *http.Request) (*http.Response, error) {
+				i := min(int(n.Add(1))-1, len(tt.statuses)-1)
+				return textResponse(r, tt.statuses[i], "{}"), nil
+			}}
+			opts := []ClientOption{WithRetryPolicy(2, time.Millisecond, time.Millisecond)}
+			if tt.allowed != nil {
+				opts = append(opts, WithAllowedMethods(tt.allowed...))
+			}
+			c := rtClient(t, rt, opts...)
+			_, err := c.Do(context.Background(), Request{Method: tt.method, Path: "/V1/x"})
+			if tt.wantWire == "" {
+				if !errors.Is(err, ErrMethodNotAllowed) || rt.count() != 0 {
+					t.Fatalf("Do(%q) = %v with %d requests; want ErrMethodNotAllowed and nothing sent", tt.method, err, rt.count())
+				}
+				return
+			}
+			if rt.count() != tt.wantReqs {
+				t.Fatalf("requests = %d, want %d (err %v)", rt.count(), tt.wantReqs, err)
+			}
+			if got := rt.last().Method; got != tt.wantWire {
+				t.Fatalf("wire method = %q, want %q", got, tt.wantWire)
+			}
+		})
+	}
+}
+
 func TestRequestHook(t *testing.T) {
 	hookErr := errors.New("refused by embedder")
 	rt := &recordingRT{}

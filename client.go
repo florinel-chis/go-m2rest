@@ -447,9 +447,14 @@ func (c *Client) Do(ctx context.Context, req Request) (*Response, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	method := req.Method
+	// The method is canonicalised once and used for the allowlist, the
+	// retry decision and the wire alike.
+	method := strings.ToUpper(req.Method)
 	if method == "" {
 		method = http.MethodGet
+	}
+	if !methodRe.MatchString(method) {
+		return nil, fmt.Errorf("magento2: invalid method %q: %w", c.redact(req.Method), ErrMethodNotAllowed)
 	}
 	if c.allowed != nil && !c.allowed[method] {
 		return nil, fmt.Errorf("magento2: %s %s: %w", c.redact(method), c.redact(req.Path), ErrMethodNotAllowed)
@@ -715,7 +720,7 @@ func methodOrGet(m string) string {
 	if m == "" {
 		return http.MethodGet
 	}
-	return m
+	return strings.ToUpper(m)
 }
 
 // backoff returns the wait before retry number attempt (1-based): the
