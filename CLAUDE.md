@@ -31,6 +31,16 @@ Live tests run only against a disposable store. On this machine that is the sand
 is never a target. There is no default `MAGENTO_HOST`.
 
 ## Keeping current
-Placeholder: a drift check (`cmd/m2drift`, report in `DRIFT.md`) comparing the client's routes
-and types against a store's `/rest/all/schema` is added in a follow-up; the routine (toolchain,
-dependencies, `govulncheck`, drift, CHANGELOG, tag) will be documented here and in the README.
+Cadence: every Magento 2.4.x release, otherwise quarterly, always before a tag.
+1. `curl -s 'https://go.dev/VERSION?m=text'` → `toolchain` line in go.mod (the `go` directive
+   only moves when dependents can follow; note it under Breaking).
+2. `go get -u ./... && go mod tidy` — there are no dependencies; adding one needs a reason.
+3. `govulncheck ./...`, `go vet ./...`, `go test -race ./...`.
+4. Live read tests against the sandbox (see Live-test rule).
+5. Drift check, then commit the report:
+   `MAGENTO_HOST=http://127.0.0.1:8084 MAGENTO_BEARER_TOKEN=… go run ./cmd/m2drift -vendor ~/fch/magento248/vendor -out DRIFT.md`
+   (exit 1 on DRIFT: a registered route the store does not serve, or a json tag its schema
+   lacks; INFO covers token-hidden routes, extension attributes, unmodelled properties).
+   Every new service registers its route and response type in `routes.go`, citing the
+   `etc/webapi.xml` that declares it; json tags come from the vendor `Api/Data/*Interface.php`.
+6. CHANGELOG entry (Breaking items with a migration snippet), then a semver tag.

@@ -1,6 +1,7 @@
 package magento2
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -38,7 +39,7 @@ func TestFunctionalV2_APIConnection(t *testing.T) {
 	t.Run("Test API Connection", func(t *testing.T) {
 		// Try to get a product that likely doesn't exist
 		_, err := magento2.GetProductBySKU("test-connection-sku", client)
-		if err != nil && err != magento2.ErrNotFound {
+		if err != nil && !errors.Is(err, magento2.ErrNotFound) {
 			// If we get an auth error or connection error, that's a problem
 			t.Logf("Connection test result: %v", err)
 		} else {

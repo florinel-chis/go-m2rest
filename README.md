@@ -2,41 +2,46 @@
 
 [![GoDoc](https://godoc.org/github.com/florinel-chis/go-m2rest?status.svg)](https://godoc.org/github.com/florinel-chis/go-m2rest)
 
-**A Modern and Robust Golang Library for Magento 2 REST API**
+**A Go client for the Magento 2 / Adobe Commerce REST API**
 
-This Golang library provides a comprehensive interface for interacting with the Magento 2 REST API. Built with modern Go practices (1.25+), it features a context-aware read/sync API, structured logging, hardened retries, and an offline (httptest-based) unit test suite.
+Plain `net/http`, no dependencies outside the standard library. Context-first reads with paging,
+a `searchCriteria` builder, typed errors that parse Magento's error documents, and the switches
+an embedder needs to run it hardened: its own `*http.Client`, an allowed-methods list, retries
+off, a body cap, a redactor and request/response hooks. A drift check compares the client with a
+live store's schema.
 
 ## Features
 
-* **Context support:** All new read/sync functions are `context.Context`-first (`GetProductsPage`, `IterateProducts`, ...); generic `GetRouteAndDecodeCtx`/`PostRouteAndDecodeCtx` helpers are available on the client, and the legacy non-ctx API keeps working
-* **Catalog sync API:** Paginated product/attribute listing with iteration helpers, attribute sets, category tree, store views and websites
-* **Comprehensive Logging:** Structured logging with zerolog; silent (no-op) by default, opt-in via `SetZeroLogger`/`EnableDebugLogging`
-* **Robust Error Handling:** Typed `APIError` (status code, endpoint, truncated body) that still matches the `ErrNotFound`/`ErrBadRequest` sentinels via `errors.Is`
-* **Authentication Support:** Multiple authentication methods including Integration tokens, Customer tokens, and Admin credentials
-* **Extensive API Coverage:**
-    * **Products:** Simple, configurable, bundle, grouped, and virtual products
-    * **Categories:** Full hierarchy management and product assignments
-    * **Attributes:** Create and manage product attributes with options
-    * **Carts:** Guest and customer cart management with full checkout flow
-    * **Orders:** Order retrieval, updates, and comments
-    * **Stock Management:** Inventory updates and stock status
-* **Performance & Reliability:**
-    * 30s per-attempt timeout by default (`SetTimeout` to override)
-    * Automatic retries on 429/500/502/503/504 honoring the `Retry-After` header (`SetRetryPolicy` to override)
-    * Connection pooling via resty v2
+* **`net/http` core:** `New(baseURL, options...)`, `Do` / `DoJSON` over a `Request` relative to
+  `/rest` (`/V1/orders`, or `/schema` under the `all` store code). An embedder-supplied
+  `*http.Client` is used exactly as given.
+* **Context-first reads with paging:** products, attributes, attribute sets, categories, orders,
+  invoices, credit memos, shipments, customers, MSI source items / sources / stocks, salable
+  quantity, legacy stock items, store views / websites / groups / configs, carts search, and the
+  REST schema. `Get<X>Page` fetches one page, `Iterate<X>` walks them all.
+* **`SearchCriteria` builder:** AND groups / OR filters, several sorts, page clamping, optional
+  field allowlist; mistakes are reported at `Values()`.
+* **Typed errors:** non-2xx answers are `*APIError` (status, method, path, capped body, the
+  Magento message with its `%placeholders` substituted); `errors.Is(err, ErrNotFound)` keeps
+  working.
+* **Safe by default:** retries only idempotent methods (GET, HEAD, OPTIONS, DELETE) on
+  429/500/502/503/504 and transport errors, honouring `Retry-After`; no cookie jar; per-client
+  `slog` logger that never sees a body, a header or a query string.
+* **Write helpers:** products, attributes and options, attribute sets and groups, categories,
+  configurable products, guest and customer carts through checkout, order updates and comments.
 
 ## Getting Started
 
 ### Prerequisites
 
 1. **Go 1.27+** - the module's `go` directive is 1.27.0 (toolchain go1.27.1)
-2. **Magento 2 Instance** - With REST API enabled
-3. **API Credentials** - Integration token or admin/customer credentials
+2. **Magento 2 / Adobe Commerce** with the REST API enabled
+3. **A token** - integration (bearer) token, or admin/customer credentials
 
 ### Installation
 
 ```bash
-go get github.com/florinel-chis/go-m2rest
+go get github.com/florinel-chis/go-m2rest@v0.2.0
 ```
 
 ### Quick Start
@@ -45,125 +50,293 @@ go get github.com/florinel-chis/go-m2rest
 package main
 
 import (
+    "context"
+    "fmt"
     "log"
-    "github.com/florinel-chis/go-m2rest"
+
+    magento2 "github.com/florinel-chis/go-m2rest"
 )
 
 func main() {
-    // Configure store connection
-    storeConfig := &magento2.StoreConfig{
-        Scheme:    "https",
-        HostName:  "your-store.com",
-        StoreCode: "default",
-    }
-
-    // Create API client with integration token
-    client, err := magento2.NewAPIClientFromIntegration(
-        storeConfig, 
-        "your_integration_token",
+    // The store root (an optional path prefix is fine); the client appends /rest.
+    client, err := magento2.New("https://shop.example",
+        magento2.WithToken("integration-token"),
+        magento2.WithUserAgent("my-sync/1.0"),
     )
     if err != nil {
         log.Fatal(err)
     }
+    ctx := context.Background()
 
-    // Create a simple product
-    product := magento2.Product{
-        Sku:            "test-product-001",
-        Name:           "Test Product",
-        Price:          29.99,
-        TypeID:         "simple",
-        AttributeSetID: 4,
-        Status:         1,
-        Visibility:     4,
-        Weight:         1.0,
-    }
-
-    mProduct, err := magento2.CreateOrReplaceProduct(&product, true, client)
+    // Typed reads with a searchCriteria built for you.
+    sc := magento2.NewSearchCriteria().
+        Filter("status", magento2.Eq, "processing").
+        Sort("created_at", magento2.Desc).
+        Page(50, 1)
+    page, err := magento2.GetOrdersPage(ctx, client, sc)
     if err != nil {
         log.Fatal(err)
     }
+    fmt.Println(page.TotalCount, "processing orders")
 
-    log.Printf("Created product: %s (ID: %d)", 
-        mProduct.Product.Sku, 
-        mProduct.Product.ID)
+    // Any route: Path is relative to /rest; StoreCode scopes it ("" = default view).
+    var views []magento2.StoreView
+    if err := client.DoJSON(ctx, magento2.Request{Path: "/V1/store/storeViews"}, &views); err != nil {
+        log.Fatal(err)
+    }
+
+    // fields= projection, set once per request.
+    resp, err := client.Do(ctx, magento2.Request{
+        Path:   "/V1/products",
+        Query:  must(magento2.NewSearchCriteria().Page(10, 1).Values()),
+        Fields: "items[sku,name],total_count",
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println(string(resp.Body))
+}
+
+func must[T any](v T, err error) T {
+    if err != nil {
+        log.Fatal(err)
+    }
+    return v
 }
 ```
 
-## Catalog sync
+The pre-v0.2 constructors keep working and take the same options:
 
-The library ships a context-aware read API designed for synchronizing a catalog into another system: paginated listing with automatic iteration, attribute metadata, attribute sets, the category tree, and store scopes.
+```go
+client, err := magento2.NewAPIClientFromIntegration(
+    &magento2.StoreConfig{Scheme: "https", HostName: "shop.example", StoreCode: "default"},
+    "integration-token",
+    magento2.WithTimeout(time.Minute),
+)
+```
+
+### Store codes
+
+Requests go to `{base}/rest{Path}` when no store code is set — Magento serves those from the
+default store view, whatever its code — and to `{base}/rest/{code}{Path}` when `WithStoreCode`
+or `Request.StoreCode` names one (`Request.StoreCode` wins). `/rest/all/schema` is
+`Request{Path: "/schema", StoreCode: "all"}` (or `GetSchema`).
+
+## Hardened embedding
+
+An embedder that must control exactly what leaves the process — a gateway, an agent tool, a
+multi-tenant service — supplies its own `*http.Client` and turns the defaults down:
+
+```go
+hc := &http.Client{
+    Transport:     myTransport,   // your dialer, proxy and TLS policy
+    CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+    // no Jar: no cookies
+}
+redact := func(s string) string { return strings.ReplaceAll(s, token, "[redacted]") }
+
+client, err := magento2.New(storeURL,
+    magento2.WithHTTPClient(hc),               // used as given: only hc.Do is called
+    magento2.WithToken(token),                 // kept unprintable: %+v of the client never shows it
+    magento2.WithAllowedMethods(http.MethodGet), // anything else is refused before a request exists
+    magento2.WithRetryPolicy(0, 0, 0),         // exactly one attempt per call
+    magento2.WithMaxBodyBytes(4<<20),          // longer bodies are cut and flagged Truncated
+    magento2.WithRedactor(redact),             // applied to every error string and log record
+    magento2.WithLogger(logger),               // nil discards; never sees bodies, headers or queries
+    magento2.WithRequestHook(func(ctx context.Context, r *http.Request) error {
+        return policy.Check(r)                 // an error aborts: nothing is sent
+    }),
+    magento2.WithResponseHook(func(ctx context.Context, r *http.Response) error {
+        return policy.CheckResponse(r)         // runs before the body is read
+    }),
+)
+...
+resp, err := client.Do(ctx, magento2.Request{Path: "/V1/orders", Query: q, MaxBodyBytes: 1 << 20})
+if errors.Is(err, magento2.ErrMethodNotAllowed) { ... }
+var out OrderPage
+err = client.DoJSON(ctx, req, &out) // refuses a truncated body with ErrBodyTruncated
+```
+
+`WithTimeout` and `WithFollowRedirects` configure the client go-m2rest builds itself (default:
+30s per attempt, redirects followed, a clone of `http.DefaultTransport` — which keeps
+`ProxyFromEnvironment`) and are refused together with `WithHTTPClient`.
+
+`ParseErrorDocument(body).Substituted(redact)` and `PageSizeLimit(apiErr.Message)` are exported
+for embedders that keep their own error types.
+
+**Carts:** prefer `GetCartsPage` (`/V1/carts/search`) for reads. Every per-cart GET
+(`/V1/carts/{id}…`, `/V1/carts/mine…`, `/V1/guest-carts/{id}…`) loads the quote model, and
+`Quote::_afterLoad` saves a quote flagged for recollection — a "read" that can write.
+
+## Catalog sync
 
 ```go
 ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 defer cancel()
 
-// Iterate all products updated since the last sync run. Pagination is
-// handled internally (stops on total_count or an empty page).
-opts := magento2.ListOptions{
-    PageSize:  200,
-    SortField: "updated_at",
-    SortDir:   "ASC",
-    Criteria: []magento2.SearchQueryCriteria{{
-        Fields: []magento2.FilterFields{{
-            Field:         magento2.Filter{FilterGroups: 0, Filters: 0, FilterFor: "updated_at"},
-            Value:         magento2.Filter{FilterGroups: 0, Filters: 0, FilterFor: "2026-01-01 00:00:00"},
-            ConditionType: magento2.Filter{FilterGroups: 0, Filters: 0, FilterFor: "gt"},
-        }},
-    }},
-}
-err := magento2.IterateProducts(ctx, client, opts, func(p magento2.Product) error {
-    fmt.Println(p.Sku, p.Name, p.UpdatedAt)
+sc := magento2.NewSearchCriteria().
+    Filter("updated_at", magento2.Gt, "2026-01-01 00:00:00").
+    Sort("updated_at", magento2.Asc).
+    Page(200, 1)
+err := magento2.IterateOrders(ctx, client, sc, func(o magento2.Order) error {
+    fmt.Println(o.IncrementID, o.Status)
     return nil // return an error to abort the iteration
 })
 
-// Fetch a single page of attribute metadata.
-attrPage, err := magento2.GetAttributesPage(ctx, client, magento2.ListOptions{PageSize: 100, CurrentPage: 1})
-for _, a := range attrPage.Items {
-    fmt.Println(a.AttributeCode, bool(a.IsFilterable))
-}
-
-// Related helpers:
-//   magento2.GetProductsPage(ctx, client, opts)      // single page of products
-//   magento2.IterateAttributes(ctx, client, opts, fn)
-//   magento2.GetAttributeSetsList(ctx, client)       // all attribute sets
-//   magento2.GetAttributeSetAttributes(ctx, client, setID)
-//   magento2.GetCategoryTree(ctx, client)            // nested CategoryTreeNode
-//   magento2.GetStoreViews(ctx, client)
-//   magento2.GetWebsites(ctx, client)
+// The product and attribute helpers take the older ListOptions:
+err = magento2.IterateProducts(ctx, client, magento2.ListOptions{PageSize: 200}, func(p magento2.Product) error {
+    return nil
+})
+//   magento2.GetAttributeSetsList(ctx, client)
+//   magento2.GetCategoryTree(ctx, client)
+//   magento2.GetStoreViews(ctx, client) / GetWebsites / GetStoreGroups / GetStoreConfigs
 ```
 
-Notes:
+Iteration stops when `total_count` items were seen, a page is empty, or a page repeats the
+previous one (Magento clamps an out-of-range page to the last page). `Attribute.IsFilterable`
+uses `FlexBool`, which tolerates Magento's mixed bool/int/string encodings.
 
-* `ListOptions.Encode()` produces the Magento `searchCriteria` query parameters (filter groups, `pageSize`, `currentPage`, `sortOrders`). A `PageSize <= 0` encodes as 100.
-* `Attribute.IsFilterable` and `Attribute.IsFilterableInSearch` are of type `FlexBool`, which tolerates the mixed encodings Magento emits (`true`/`false`, `0`/`1`/`2`, `"0"`/`"1"`/`"2"`, `"true"`/`"false"`) and always marshals as a plain JSON bool.
+## Error Handling
+
+```go
+order, err := magento2.GetOrder(ctx, client, 42)
+if errors.Is(err, magento2.ErrNotFound) {
+    // 404
+}
+var apiErr *magento2.APIError
+if errors.As(err, &apiErr) {
+    log.Printf("%s %s: %d %s", apiErr.Method, apiErr.Path, apiErr.StatusCode, apiErr.Message)
+    if n, ok := magento2.PageSizeLimit(apiErr.Message); ok {
+        // the store caps searchCriteria[pageSize] at n
+    }
+}
+```
+
+`Error()` never contains the host or the query string.
+
+## Logging
+
+Each client has its own `*slog.Logger` (`WithLogger`; silent by default). It receives one debug
+record per attempt with `method`, `path`, `status`, `elapsed`, `bytes` and `truncated` — never a
+body, a header or a query string — after the redactor.
 
 ## Testing
 
-The library includes an offline unit test suite (httptest-based, no live Magento needed) plus optional live functional tests.
-
-### Running Tests
-
 ```bash
-# Run all tests; the live functional tests under ./tests are skipped
-# automatically when MAGENTO_HOST is not set
-go test ./...
+go vet ./...
+go test -race ./...   # offline (httptest); live tests skip without MAGENTO_HOST
 
-# Run the live tests against a real Magento instance
-MAGENTO_HOST=http://magento.local MAGENTO_BEARER_TOKEN=token go test ./tests -v
-
-# Run specific test
-go test ./tests -run TestAdvancedProducts_VirtualProduct -v
+# Live tests: only against a disposable store
+MAGENTO_HOST=https://sandbox.example MAGENTO_BEARER_TOKEN=... go test -race ./tests/...
+# Tests that create, modify or delete data also need
+MAGENTO_TEST_ALLOW_WRITES=1
 ```
 
-### Test Configuration
+A `.env` file in the project root (`MAGENTO_HOST`, `MAGENTO_BEARER_TOKEN`, `MAGENTO_STORE_CODE`,
+`TEST_DEBUG`, `MAGENTO_TEST_ALLOW_WRITES`) is read by the live tests.
 
-Create a `.env` file in the project root:
+## Keeping current
 
-```env
-MAGENTO_HOST=http://your-magento-site.com
-MAGENTO_BEARER_TOKEN=your_integration_token
-MAGENTO_STORE_CODE=default
-TEST_DEBUG=true
+The client is checked against Magento itself, not against memory:
+
+```bash
+# Drift: routes and response types vs a store's /rest/all/schema
+MAGENTO_HOST=https://sandbox.example MAGENTO_BEARER_TOKEN=... \
+    go run ./cmd/m2drift -vendor /path/to/magento/vendor -out DRIFT.md
+```
+
+`DRIFT` lines (a route the store does not serve, a json tag its schema does not define) fail the
+check with exit code 1; `INFO` lines report schema properties a type does not model, extension
+attributes of modules the store lacks, and routes hidden from the schema by the token's ACL
+(`-vendor` finds them in `etc/webapi.xml`). `DRIFT.md` holds the latest report.
+
+**Cadence:** on every Magento 2.4.x release, otherwise quarterly, and always before a tag.
+
+**Routine:**
+
+1. `curl -s 'https://go.dev/VERSION?m=text'` → update the `toolchain` line in `go.mod`
+2. `go get -u ./... && go mod tidy` (there are no dependencies today; keep it that way)
+3. `govulncheck ./...`
+4. `go vet ./...` and `go test -race ./...`
+5. Live read tests against a disposable store
+6. The drift check above; commit `DRIFT.md`
+7. CHANGELOG entry, then a semver tag
+
+## API Coverage
+
+| Area | Functions |
+|---|---|
+| Generic | `New`, `(*Client).Do`, `DoJSON`, `GetRouteAndDecodeCtx`, `PostRouteAndDecodeCtx`, `Routes`, `GetSchema` |
+| Products | `GetProductsPage`, `IterateProducts`, `GetProductBySKU`, `CreateOrReplaceProduct`, `(*MProduct).UpdateQuantityForStockItem` |
+| Attributes | `GetAttributesPage`, `IterateAttributes`, `GetAttributeByAttributeCode`, `CreateAttribute`, `(*MAttribute).AddOption` |
+| Attribute sets | `GetAttributeSetsList`, `GetAttributeSetAttributes`, `GetAttributeSetByName`, `CreateAttributeSet` |
+| Categories | `GetCategoryTree`, `GetCategoryByName`, `CreateCategory`, `(*MCategory).AssignProductByProductLink` |
+| Configurable products | `GetConfigurableProductBySKU`, `SetOptionForExistingConfigurableProduct`, `(*MConfigurableProduct).AddChildBySKU` |
+| Carts | `GetCartsPage`, `IterateCarts`, `NewGuestCartFromAPIClient`, `NewCustomerCartFromAPIClient`, `(*MCart)` checkout methods |
+| Sales | `GetOrdersPage`, `IterateOrders`, `GetOrder`, `GetOrderByIncrementID`, invoices / credit memos / shipments `Get*Page`, `Iterate*`, `Get*` |
+| Customers | `GetCustomersPage`, `IterateCustomers`, `GetCustomer` |
+| Inventory | `GetSourceItemsPage`, `GetSourcesPage`, `GetStocksPage` (+ `Iterate*`), `GetSalableQuantity`, `GetStockItem`, `GetLowStockItems` |
+| Stores | `GetStoreViews`, `GetWebsites`, `GetStoreGroups`, `GetStoreConfigs` |
+
+## Advanced Usage
+
+### Working with Different Product Types
+
+```go
+// Virtual Product (no shipping)
+virtualProduct := magento2.Product{
+    Sku:    "virtual-service-001",
+    Name:   "Virtual Service",
+    TypeID: "virtual",
+    Price:  99.99,
+    // No weight needed for virtual products
+}
+
+// Grouped Product
+groupedProduct := magento2.Product{
+    Sku:    "grouped-product-001",
+    Name:   "Product Bundle",
+    TypeID: "grouped",
+    // Price comes from associated products
+}
+
+// Configurable Product
+configurableProduct := magento2.Product{
+    Sku:    "configurable-001",
+    Name:   "T-Shirt",
+    TypeID: "configurable",
+    // Requires attribute configuration
+}
+```
+
+### Cart Operations
+
+```go
+// Create guest cart
+guestCart, err := magento2.NewGuestCartFromAPIClient(client)
+
+// Add items
+item := magento2.CartItem{
+    Sku:     "test-product-001",
+    Qty:     2,
+    QuoteID: guestCart.QuoteID,
+}
+err = guestCart.AddItems([]magento2.CartItem{item})
+
+// Estimate shipping
+shippingAddr := &magento2.ShippingAddress{
+    Address: magento2.Address{
+        CountryID: "US",
+        Postcode:  "10001",
+        City:      "New York",
+        Street:    []string{"123 Main St"},
+        Firstname: "John",
+        Lastname:  "Doe",
+        Telephone: "555-1234",
+        Email:     "john@example.com",
+    },
+}
+carriers, err := guestCart.EstimateShippingCarrier(shippingAddr)
 ```
 
 ## Docker Support
@@ -264,171 +437,13 @@ This will:
 - Update their stock from the CSV file
 - Use 10 concurrent operations
 
-## Advanced Usage
+## Bulk Operations
 
-### Working with Different Product Types
-
-```go
-// Virtual Product (no shipping)
-virtualProduct := magento2.Product{
-    Sku:    "virtual-service-001",
-    Name:   "Virtual Service",
-    TypeID: "virtual",
-    Price:  99.99,
-    // No weight needed for virtual products
-}
-
-// Grouped Product
-groupedProduct := magento2.Product{
-    Sku:    "grouped-product-001",
-    Name:   "Product Bundle",
-    TypeID: "grouped",
-    // Price comes from associated products
-}
-
-// Configurable Product
-configurableProduct := magento2.Product{
-    Sku:    "configurable-001",
-    Name:   "T-Shirt",
-    TypeID: "configurable",
-    // Requires attribute configuration
-}
-```
-
-### Cart Operations
-
-```go
-// Create guest cart
-guestCart, err := magento2.NewGuestCartFromAPIClient(client)
-
-// Add items
-item := magento2.CartItem{
-    Sku:     "test-product-001",
-    Qty:     2,
-    QuoteID: guestCart.QuoteID,
-}
-err = guestCart.AddItems([]magento2.CartItem{item})
-
-// Estimate shipping
-shippingAddr := &magento2.ShippingAddress{
-    Address: magento2.Address{
-        CountryID: "US",
-        Postcode:  "10001",
-        City:      "New York",
-        Street:    []string{"123 Main St"},
-        Firstname: "John",
-        Lastname:  "Doe",
-        Telephone: "555-1234",
-        Email:     "john@example.com",
-    },
-}
-carriers, err := guestCart.EstimateShippingCarrier(shippingAddr)
-```
-
-## API Coverage
-
-### Products API
-- `CreateOrReplaceProduct()` - Create or update products
-- `GetProductBySKU()` - Retrieve product details
-- `UpdateProductStockItemBySKU()` - Update inventory
-- Support for all product types
-
-### Categories API
-- `CreateCategory()` - Create categories
-- `GetCategoryByID()` - Retrieve category details
-- `GetCategoriesList()` - List all categories
-- `AssignProductsToCategoryByID()` - Manage product assignments
-
-### Attributes API
-- `CreateAttribute()` - Create product attributes
-- `GetAttributeByCode()` - Retrieve attribute details
-- `AddOption()` - Add dropdown options
-- Attribute set and group management
-
-### Cart API
-- Guest and customer cart support
-- Add/remove items
-- Shipping and payment estimation
-- Order placement
-
-### Orders API
-- `GetOrderByIncrementID()` - Retrieve orders
-- `UpdateOrderEntity()` - Update order status
-- `AddOrderComment()` - Add order notes
-
-## Project Structure
-
-```
-go-m2rest/
-├── *.go                 # Main library files
-├── tests/              # Test files
-│   ├── functional_test.go
-│   ├── advanced_product_test.go
-│   └── test_config.go
-├── scripts/            # Utility scripts
-│   ├── bulk_product_update.go
-│   └── run_bulk_update.sh
-├── .env.example        # Example configuration
-└── README.md           # This file
-```
-
-## Error Handling
-
-The library provides structured error types. HTTP errors carry a typed `*APIError` (status code, endpoint, response body truncated to 500 bytes) and still match the historical sentinels via `errors.Is`:
-
-```go
-product, err := magento2.GetProductBySKU("non-existent", client)
-if err != nil {
-    if errors.Is(err, magento2.ErrNotFound) {
-        // Handle not found case
-    }
-    var apiErr *magento2.APIError
-    if errors.As(err, &apiErr) {
-        log.Printf("status=%d endpoint=%s body=%s", apiErr.StatusCode, apiErr.Endpoint, apiErr.Body)
-    }
-}
-```
-
-## Logging
-
-The library uses zerolog for structured logging, but is **silent by default**: importing the package no longer installs a console writer on the global zerolog logger (this used to hijack the logging setup of importing applications). To see logs:
-
-```go
-// Route the library's logs into your own zerolog logger
-magento2.SetZeroLogger(myLogger)
-
-// Or explicitly enable a debug-level console logger on stderr
-magento2.EnableDebugLogging()
-
-// Back to silent
-magento2.DisableDebugLogging()
-```
-
-## Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Ensure all tests pass
-5. Submit a pull request
-
-### Development Setup
+The `scripts/` directory has a bulk product creation and stock update example:
 
 ```bash
-# Clone the repository
-git clone https://github.com/florinel-chis/go-m2rest.git
-cd go-m2rest
-
-# Install dependencies
-go mod download
-
-# Run tests
-go test ./...
-
-# Run linter (optional)
-golangci-lint run
+cd scripts
+./run_bulk_update.sh stock_updates.csv 100 10 both
 ```
 
 ## License
@@ -443,24 +458,5 @@ For issues, feature requests, or questions:
 
 ## Changelog
 
-### Recent Updates
-- **2026-08-10:** Catalog sync read API (ctx-first pagination/iteration helpers), context support, default timeouts, 429/`Retry-After` aware retries, typed `APIError`, no-op logger by default (no more global zerolog hijack), `FlexBool`, `WrappingAddPrintedCard` fix, `StoreConfig.BasePath` — see CHANGELOG.md
-- **2025-01-15:** Updated to Go 1.25+ with latest dependency versions
-  - Go toolchain: 1.25.1
-  - Updated all dependencies to latest stable versions
-  - golang.org/x/net: v0.47.0
-  - golang.org/x/sys: v0.38.0
-  - mattn/go-colorable: v0.1.14
-  - mattn/go-isatty: v0.0.20
-  - Verified no breaking changes
-  - All code compiles and passes quality checks
-- Added support for Go 1.21+ features
-- Migrated to resty v2 for better performance
-- Added structured logging with zerolog
-- Improved test coverage and organization
-- Added bulk operations utilities
-- Enhanced error handling with wrapped errors
-
----
-
-**Build robust Magento 2 integrations with modern Go!**
+See [CHANGELOG.md](CHANGELOG.md). v0.2.0 replaces resty and zerolog with `net/http` and `slog`
+(migration notes per item there).

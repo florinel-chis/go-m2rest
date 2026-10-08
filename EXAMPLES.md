@@ -1,6 +1,52 @@
 # go-m2rest Real-World Examples and Use Cases
 
-This document provides practical examples and use cases for integrating the go-m2rest library into real-world e-commerce scenarios.
+This document provides practical examples and use cases for integrating the go-m2rest library into real-world e-commerce scenarios. Functions such as `getWarehouseInventory` or `damClient` stand for the embedder's own systems.
+
+All examples assume a client built with `New` (v0.2.0+):
+
+```go
+client, err := magento2.New("https://shop.example",
+    magento2.WithToken(os.Getenv("MAGENTO_BEARER_TOKEN")),
+    magento2.WithUserAgent("my-integration/1.0"),
+)
+```
+
+## 🔎 Reading with the v0.2 services
+
+```go
+ctx := context.Background()
+
+// Orders that need fulfilment, newest first, 100 per page, every page.
+sc := magento2.NewSearchCriteria().
+    Filter("status", magento2.Eq, "processing").
+    Sort("created_at", magento2.Desc).
+    Page(100, 1)
+err := magento2.IterateOrders(ctx, client, sc, func(o magento2.Order) error {
+    fmt.Println(o.IncrementID, o.GrandTotal)
+    return nil
+})
+
+// Shipments with their tracking numbers.
+page, err := magento2.GetShipmentsPage(ctx, client, magento2.NewSearchCriteria().
+    Filter("created_at", magento2.Gteq, "2026-10-01 00:00:00"))
+for _, sh := range page.Items {
+    for _, tr := range sh.Tracks {
+        fmt.Println(sh.IncrementID, tr.CarrierCode, tr.TrackNumber)
+    }
+}
+
+// MSI quantities per source, and what is salable on a stock.
+items, err := magento2.GetSourceItemsPage(ctx, client, magento2.NewSearchCriteria().
+    FilterIn("sku", "24-MB01", "24-MB04"))
+qty, err := magento2.GetSalableQuantity(ctx, client, "24-MB01", 1)
+
+// Store scopes: locale, currencies and base URLs per store view.
+configs, err := magento2.GetStoreConfigs(ctx, client)
+
+// Anything else: Do/DoJSON with a path relative to /rest.
+var invoice magento2.Invoice
+err = client.DoJSON(ctx, magento2.Request{Path: "/V1/invoices/3"}, &invoice)
+```
 
 ## 🛍️ E-commerce Integration Use Cases
 
@@ -13,31 +59,34 @@ This document provides practical examples and use cases for integrating the go-m
 package main
 
 import (
+    "context"
+    "errors"
     "log"
-    "github.com/florinel-chis/go-m2rest"
+    "strconv"
+
+    magento2 "github.com/florinel-chis/go-m2rest"
 )
 
-func syncInventoryFromWarehouse(client *magento2.Client, warehouseItems []WarehouseItem) {
+func syncInventoryFromWarehouse(ctx context.Context, client *magento2.Client, warehouseItems []WarehouseItem) {
     for _, item := range warehouseItems {
-        // Get product from Magento
-        product, err := magento2.GetProductBySKU(item.SKU, client)
-        if err != nil {
-            log.Printf("SKU %s not found: %v", item.SKU, err)
+        // The legacy stock item carries the item_id the update needs.
+        stock, err := magento2.GetStockItem(ctx, client, item.SKU)
+        if errors.Is(err, magento2.ErrNotFound) {
+            log.Printf("SKU %s not found", item.SKU)
+            continue
+        } else if err != nil {
+            log.Printf("SKU %s: %v", item.SKU, err)
             continue
         }
-        
-        // Update stock quantity
-        if stockItem, ok := product.Product.ExtensionAttributes["stock_item"].(map[string]any); ok {
-            if itemID, ok := stockItem["item_id"]; ok {
-                err = product.UpdateQuantityForStockItem(
-                    fmt.Sprintf("%v", itemID), 
-                    item.Quantity, 
-                    item.Quantity > 0,
-                )
-                if err != nil {
-                    log.Printf("Failed to update stock for %s: %v", item.SKU, err)
-                }
-            }
+
+        product, err := magento2.GetProductBySKU(item.SKU, client)
+        if err != nil {
+            log.Printf("SKU %s: %v", item.SKU, err)
+            continue
+        }
+        err = product.UpdateQuantityForStockItem(strconv.Itoa(stock.ItemID), item.Quantity, item.Quantity > 0)
+        if err != nil {
+            log.Printf("Failed to update stock for %s: %v", item.SKU, err)
         }
     }
 }
@@ -457,7 +506,7 @@ func processFulfillment(client *magento2.Client, fulfillmentClient *FulfillmentC
         // Update order with tracking information
         shipment := magento2.Shipment{
             OrderID: order.EntityID,
-            Tracks: []magento2.Track{
+            Tracks: []magento2.ShipmentTrack{
                 {
                     TrackNumber: trackingInfo.TrackingNumber,
                     Title:       trackingInfo.Carrier,
@@ -533,9 +582,10 @@ func (api *MobileAPI) AddToCart(customerToken string, sku string, qty int) error
 **Implementation**:
 ```go
 // GraphQL-like resolver for PWA
-func resolveCategoryPage(client *magento2.Client, categoryID int, filters map[string]any) (*CategoryPageData, error) {
+func resolveCategoryPage(ctx context.Context, client *magento2.Client, categoryID int, filters map[string]any) (*CategoryPageData, error) {
     // Get category info
-    category, err := magento2.GetCategoryByID(categoryID, client)
+    var category magento2.Category
+    err := client.DoJSON(ctx, magento2.Request{Path: "/V1/categories/" + strconv.Itoa(categoryID)}, &category)
     if err != nil {
         return nil, err
     }
@@ -907,7 +957,7 @@ func (sm *SubscriptionManager) ProcessSubscriptions() error {
             CustomerEmail:     sub.CustomerEmail,
             CustomerFirstname: sub.CustomerFirstname,
             CustomerLastname:  sub.CustomerLastname,
-            Items: []magento2.OrderItem{
+            Items: []magento2.Item{
                 {
                     Sku:   sub.ProductSKU,
                     Qty:   sub.Quantity,
@@ -1021,11 +1071,11 @@ func syncProductMedia(client *magento2.Client, damClient *DAMClient) error {
         }
         
         // Clear existing media
-        product.MediaGalleryEntries = []magento2.MediaGalleryEntry{}
+        product.MediaGalleryEntries = []magento2.MediaGalleryEntries{}
         
         // Add new media
         for i, asset := range assets {
-            mediaEntry := magento2.MediaGalleryEntry{
+            mediaEntry := magento2.MediaGalleryEntries{
                 MediaType: asset.Type, // image or video
                 Label:     asset.Label,
                 Position:  i,
@@ -1107,22 +1157,21 @@ Here's a comprehensive example that combines multiple use cases into a daily aut
 package main
 
 import (
+    "context"
     "log"
+    "log/slog"
+    "os"
     "time"
-    "github.com/florinel-chis/go-m2rest"
+
+    magento2 "github.com/florinel-chis/go-m2rest"
 )
 
 func main() {
-    // Initialize client
-    storeConfig := &magento2.StoreConfig{
-        Scheme:    "https",
-        HostName:  "magento.local",
-        StoreCode: "default",
-    }
-    
-    client, err := magento2.NewAPIClientFromIntegration(
-        storeConfig,
-        "your_integration_token",
+    // Initialize client: store root, token, a logger for one line per request.
+    client, err := magento2.New("https://shop.example",
+        magento2.WithToken(os.Getenv("MAGENTO_BEARER_TOKEN")),
+        magento2.WithTimeout(time.Minute),
+        magento2.WithLogger(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))),
     )
     if err != nil {
         log.Fatal(err)
@@ -1137,7 +1186,7 @@ func runDailyAutomation(client *magento2.Client) {
     
     // 1. Morning: Inventory sync
     log.Println("Syncing inventory...")
-    syncInventoryFromWarehouse(client, getWarehouseInventory())
+    syncInventoryFromWarehouse(context.Background(), client, getWarehouseInventory())
     
     // 2. Price adjustments
     log.Println("Applying dynamic pricing...")
