@@ -53,7 +53,7 @@ non-standard-library dependency.
   `RetryMaxWaitSeconds`). Use `WithRetryPolicy(count, wait, maxWait)` or `SetRetryPolicy`; the
   defaults are `DefaultRetryCount`, `DefaultRetryWaitTime`, `DefaultRetryMaxWaitTime`.
 - **`APIError` reshaped.** `Endpoint string` is replaced by `Method` and `Path` (no host, no query);
-  `Body` is now `[]byte` (capped at 64 KiB or the body cap, whichever is smaller) and the new
+  `Body` is now `[]byte` (capped at the body cap like a 2xx body, or at 64 KiB when no cap is set) and the new
   `Message` / `Parameters` carry the parsed Magento error document. `Error()` is
   `"magento2: GET /V1/orders: status 404: <message>"`.
   ```go

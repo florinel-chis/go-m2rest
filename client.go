@@ -37,9 +37,9 @@ const (
 	DefaultUserAgent = "go-m2rest"
 )
 
-// defaultErrorBodyBytes bounds APIError.Body: the effective body cap
-// (Request.MaxBodyBytes, else WithMaxBodyBytes) applies when it is smaller,
-// and this default applies when the cap is larger or unlimited.
+// defaultErrorBodyBytes bounds APIError.Body when no body cap is set
+// (neither Request.MaxBodyBytes nor WithMaxBodyBytes); an explicit cap
+// always wins, for errors as for 2xx answers.
 const defaultErrorBodyBytes = 64 << 10
 
 // ErrBodyTruncated is returned by DoJSON when the response body exceeded the
@@ -556,7 +556,7 @@ func (c *Client) attempt(ctx context.Context, method, path, target string, body 
 
 	ok := hresp.StatusCode >= 200 && hresp.StatusCode < 300
 	readCap := bodyCap
-	if !ok && (readCap <= 0 || readCap > defaultErrorBodyBytes) {
+	if !ok && readCap <= 0 {
 		readCap = defaultErrorBodyBytes
 	}
 	data, truncated, readErr := readCapped(hresp.Body, readCap)

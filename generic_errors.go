@@ -33,8 +33,8 @@ type APIError struct {
 	Path   string
 	Header http.Header
 	// Body is the response body, capped at the request's body cap
-	// (Request.MaxBodyBytes, else WithMaxBodyBytes) or 64 KiB, whichever is
-	// smaller; 64 KiB when the cap is unlimited.
+	// (Request.MaxBodyBytes, else WithMaxBodyBytes) like a 2xx body; when no
+	// cap is set it is capped at 64 KiB.
 	Body []byte
 	// Message is the error document's message with its parameters
 	// substituted (see ErrorDocument.Substituted), or the HTTP status text

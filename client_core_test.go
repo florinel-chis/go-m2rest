@@ -803,27 +803,43 @@ func TestAPIErrorShape(t *testing.T) {
 
 func TestAPIErrorBodyCap(t *testing.T) {
 	big := strings.Repeat("x", 2*defaultErrorBodyBytes)
+	// A developer-mode error document: the trace makes it ~100 KiB.
+	devDoc := `{"message":"No such entity with %fieldName = %fieldValue","parameters":{"fieldName":"id","fieldValue":"7"},"trace":"` +
+		strings.Repeat("#0 /var/www/html/vendor/magento/framework/x.php(1): y() ", 2000) + `"}`
 	tests := []struct {
-		name      string
-		clientCap int
-		reqCap    int
-		wantLen   int
+		name        string
+		body        string
+		clientCap   int
+		reqCap      int
+		wantLen     int
+		wantMessage string
 	}{
-		{name: "unlimited client uses the error default", wantLen: defaultErrorBodyBytes},
-		{name: "smaller client cap wins", clientCap: 100, wantLen: 100},
-		{name: "request cap wins", clientCap: 100, reqCap: 10, wantLen: 10},
-		{name: "larger cap is bounded by the error default", clientCap: 10 * defaultErrorBodyBytes, wantLen: defaultErrorBodyBytes},
+		{name: "unlimited client uses the error default", body: big, wantLen: defaultErrorBodyBytes},
+		{name: "smaller client cap wins", body: big, clientCap: 100, wantLen: 100},
+		{name: "request cap wins", body: big, clientCap: 100, reqCap: 10, wantLen: 10},
+		{name: "larger explicit client cap wins", body: big, clientCap: 10 * defaultErrorBodyBytes, wantLen: len(big)},
+		{name: "larger explicit request cap wins", body: big, reqCap: 10 * defaultErrorBodyBytes, wantLen: len(big)},
+		{
+			name: "explicit 1 MiB cap keeps a large error document whole", body: devDoc, clientCap: 1 << 20,
+			wantLen: len(devDoc), wantMessage: "No such entity with id = 7",
+		},
+	}
+	if len(devDoc) < 100<<10 {
+		t.Fatalf("developer-mode fixture is %d bytes, want >= 100 KiB", len(devDoc))
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rt := &recordingRT{respond: func(r *http.Request) (*http.Response, error) {
-				return textResponse(r, http.StatusNotFound, big), nil
+				return textResponse(r, http.StatusNotFound, tt.body), nil
 			}}
 			c := rtClient(t, rt, WithMaxBodyBytes(tt.clientCap))
 			_, err := c.Do(context.Background(), Request{Path: "/V1/x", MaxBodyBytes: tt.reqCap})
 			var apiErr *APIError
 			if !errors.As(err, &apiErr) || len(apiErr.Body) != tt.wantLen {
 				t.Fatalf("Do = %v (len %d), want body of %d", err, len(apiErr.Body), tt.wantLen)
+			}
+			if tt.wantMessage != "" && apiErr.Message != tt.wantMessage {
+				t.Fatalf("Message = %q, want %q (error document not parsed)", apiErr.Message, tt.wantMessage)
 			}
 		})
 	}
