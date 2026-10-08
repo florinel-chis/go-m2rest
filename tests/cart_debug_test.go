@@ -11,6 +11,7 @@ import (
 )
 
 func TestCartDebug_AddItemPayload(t *testing.T) {
+	skipWithoutWrites(t)
 	skipWithoutMagentoHost(t)
 	client, _, err := SetupTestClient()
 	if err != nil {

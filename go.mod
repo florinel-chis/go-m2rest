@@ -2,7 +2,7 @@ module github.com/florinel-chis/go-m2rest
 
 go 1.25.0
 
-toolchain go1.25.1
+toolchain go1.27.1
 
 require (
 	github.com/go-resty/resty/v2 v2.16.5

@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"testing"
 	"time"
 
 	magento2 "github.com/florinel-chis/go-m2rest"
@@ -28,7 +29,6 @@ type TestConfig struct {
 // DefaultTestConfig returns default test configuration
 func DefaultTestConfig() *TestConfig {
 	return &TestConfig{
-		Host:       "http://localhost",
 		StoreCode:  "default",
 		APIVersion: "V1",
 		RestPrefix: "/rest",
@@ -74,7 +74,11 @@ func LoadTestConfigFromEnv() (*TestConfig, error) {
 		}
 	}
 
-	// Validate required fields
+	// Validate required fields. There is deliberately no default host: live
+	// tests only ever run against a store the caller names explicitly.
+	if config.Host == "" {
+		return nil, fmt.Errorf("MAGENTO_HOST is required")
+	}
 	if config.BearerToken == "" {
 		return nil, fmt.Errorf("MAGENTO_BEARER_TOKEN is required")
 	}
@@ -99,6 +103,21 @@ func (tc *TestConfig) CreateStoreConfig() (*magento2.StoreConfig, error) {
 		HostName:  parsedURL.Host,
 		StoreCode: tc.StoreCode,
 	}, nil
+}
+
+// allowWritesEnv names the variable that enables tests which create, modify
+// or delete data on the live store.
+const allowWritesEnv = "MAGENTO_TEST_ALLOW_WRITES"
+
+// skipWithoutWrites skips a test that writes to the live store unless
+// MAGENTO_TEST_ALLOW_WRITES=1 is set. Run write tests only against a
+// disposable store.
+func skipWithoutWrites(t *testing.T) {
+	t.Helper()
+	loadDotEnv()
+	if os.Getenv(allowWritesEnv) != "1" {
+		t.Skip(allowWritesEnv + "=1 not set; skipping test that writes to the store")
+	}
 }
 
 // SetupTestClient creates a configured API client for testing

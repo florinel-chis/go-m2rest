@@ -8,6 +8,7 @@ import (
 )
 
 func TestCartDebug_UseExistingProduct(t *testing.T) {
+	skipWithoutWrites(t)
 	skipWithoutMagentoHost(t)
 	client, _, err := SetupTestClient()
 	if err != nil {

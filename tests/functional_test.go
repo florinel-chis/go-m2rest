@@ -49,6 +49,7 @@ func TestFunctionalV2_APIConnection(t *testing.T) {
 }
 
 func TestFunctionalV2_Products(t *testing.T) {
+	skipWithoutWrites(t)
 	client, _ := setupTestClientV2(t)
 
 	t.Run("Create and Retrieve Product", func(t *testing.T) {
@@ -144,6 +145,7 @@ func TestFunctionalV2_Categories(t *testing.T) {
 	})
 
 	t.Run("Create Category", func(t *testing.T) {
+		skipWithoutWrites(t)
 		category := magento2.Category{
 			Name:          fmt.Sprintf("Test Category %d", time.Now().Unix()),
 			IsActive:      true,
@@ -175,6 +177,7 @@ func TestFunctionalV2_Categories(t *testing.T) {
 }
 
 func TestFunctionalV2_Attributes(t *testing.T) {
+	skipWithoutWrites(t)
 	client, _ := setupTestClientV2(t)
 
 	t.Run("Create and Retrieve Attribute", func(t *testing.T) {
@@ -219,6 +222,7 @@ func TestFunctionalV2_Attributes(t *testing.T) {
 }
 
 func TestFunctionalV2_Cart(t *testing.T) {
+	skipWithoutWrites(t)
 	client, _ := setupTestClientV2(t)
 
 	t.Run("Guest Cart Basic Flow", func(t *testing.T) {
