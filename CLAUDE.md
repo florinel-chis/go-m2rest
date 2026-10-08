@@ -4,6 +4,8 @@ Go client library for the Magento 2 / Adobe Commerce REST API
 (module `github.com/florinel-chis/go-m2rest`, package `magento2`). Plain `net/http`,
 no non-standard-library dependencies. Callers of the library are called *embedders*.
 
+Requires Go 1.27+ (`go 1.27.0`, `toolchain go1.27.1` in go.mod).
+
 ## Commands
 - `go vet ./...`
 - `go test -race ./...` — unit tests (httptest only, no network)

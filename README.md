@@ -29,7 +29,7 @@ This Golang library provides a comprehensive interface for interacting with the 
 
 ### Prerequisites
 
-1. **Go 1.25+** - Required for modern Go features and latest security patches
+1. **Go 1.27+** - the module's `go` directive is 1.27.0 (toolchain go1.27.1)
 2. **Magento 2 Instance** - With REST API enabled
 3. **API Credentials** - Integration token or admin/customer credentials
 
