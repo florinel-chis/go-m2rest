@@ -171,7 +171,7 @@ func TestSuppliedHTTPClientUsedAsGiven(t *testing.T) {
 		t.Fatalf("RoundTripper saw %d requests, want 1", rt.count())
 	}
 	got := rt.last()
-	if got.URL.String() != "https://shop.example/rest/default/V1/orders" {
+	if got.URL.String() != "https://shop.example/rest/V1/orders" {
 		t.Errorf("URL = %q", got.URL.String())
 	}
 	if got.Header.Get("Authorization") != "Bearer tok" {
@@ -211,7 +211,7 @@ func TestNewRejectsInvalidConfiguration(t *testing.T) {
 		{name: "negative retry count", base: "https://shop.example", opts: []ClientOption{WithRetryPolicy(-1, 0, 0)}},
 		{name: "nil http client", base: "https://shop.example", opts: []ClientOption{WithHTTPClient(nil)}},
 		{name: "invalid store code", base: "https://shop.example", opts: []ClientOption{WithStoreCode("de/../admin")}},
-		{name: "empty store code", base: "https://shop.example", opts: []ClientOption{WithStoreCode("")}},
+		{name: "store code with a dash", base: "https://shop.example", opts: []ClientOption{WithStoreCode("sh-op")}},
 		{name: "invalid allowed method", base: "https://shop.example", opts: []ClientOption{WithAllowedMethods("GET POST")}},
 	}
 	for _, tt := range tests {
@@ -233,17 +233,17 @@ func TestURLJoin(t *testing.T) {
 		wantQuery string // RawQuery as sent
 		wantErr   bool
 	}{
-		{name: "store root", base: "https://shop.example", req: Request{Path: "/V1/orders"}, wantPath: "/rest/default/V1/orders"},
-		{name: "root with trailing slash", base: "https://shop.example/", req: Request{Path: "/V1/orders"}, wantPath: "/rest/default/V1/orders"},
-		{name: "base with path prefix", base: "https://shop.example/magento", req: Request{Path: "/V1/orders"}, wantPath: "/magento/rest/default/V1/orders"},
-		{name: "prefix with trailing slash", base: "https://shop.example/sub/dir/", req: Request{Path: "/V1/orders"}, wantPath: "/sub/dir/rest/default/V1/orders"},
+		{name: "store root", base: "https://shop.example", req: Request{Path: "/V1/orders"}, wantPath: "/rest/V1/orders"},
+		{name: "root with trailing slash", base: "https://shop.example/", req: Request{Path: "/V1/orders"}, wantPath: "/rest/V1/orders"},
+		{name: "base with path prefix", base: "https://shop.example/magento", req: Request{Path: "/V1/orders"}, wantPath: "/magento/rest/V1/orders"},
+		{name: "prefix with trailing slash", base: "https://shop.example/sub/dir/", req: Request{Path: "/V1/orders"}, wantPath: "/sub/dir/rest/V1/orders"},
 		{name: "client store code", base: "https://shop.example", opts: []ClientOption{WithStoreCode("de")}, req: Request{Path: "/V1/orders"}, wantPath: "/rest/de/V1/orders"},
 		{name: "request store code overrides client", base: "https://shop.example", opts: []ClientOption{WithStoreCode("de")}, req: Request{Path: "/V1/orders", StoreCode: "fr"}, wantPath: "/rest/fr/V1/orders"},
 		{name: "schema under all", base: "https://shop.example", req: Request{Path: "/schema", StoreCode: "all"}, wantPath: "/rest/all/schema"},
-		{name: "escaped segments preserved", base: "https://shop.example", req: Request{Path: "/V1/products/a%2Fb%20c"}, wantPath: "/rest/default/V1/products/a%2Fb%20c"},
-		{name: "escaped plus and percent preserved", base: "https://shop.example", req: Request{Path: "/V1/products/x%2By%25z"}, wantPath: "/rest/default/V1/products/x%2By%25z"},
-		{name: "query encoded", base: "https://shop.example", req: Request{Path: "/V1/orders", Query: url.Values{"searchCriteria[pageSize]": {"5"}}}, wantPath: "/rest/default/V1/orders", wantQuery: "searchCriteria%5BpageSize%5D=5"},
-		{name: "fields set once", base: "https://shop.example", req: Request{Path: "/V1/orders", Query: url.Values{"fields": {"a", "b"}}, Fields: "items[sku]"}, wantPath: "/rest/default/V1/orders", wantQuery: "fields=items%5Bsku%5D"},
+		{name: "escaped segments preserved", base: "https://shop.example", req: Request{Path: "/V1/products/a%2Fb%20c"}, wantPath: "/rest/V1/products/a%2Fb%20c"},
+		{name: "escaped plus and percent preserved", base: "https://shop.example", req: Request{Path: "/V1/products/x%2By%25z"}, wantPath: "/rest/V1/products/x%2By%25z"},
+		{name: "query encoded", base: "https://shop.example", req: Request{Path: "/V1/orders", Query: url.Values{"searchCriteria[pageSize]": {"5"}}}, wantPath: "/rest/V1/orders", wantQuery: "searchCriteria%5BpageSize%5D=5"},
+		{name: "fields set once", base: "https://shop.example", req: Request{Path: "/V1/orders", Query: url.Values{"fields": {"a", "b"}}, Fields: "items[sku]"}, wantPath: "/rest/V1/orders", wantQuery: "fields=items%5Bsku%5D"},
 		{name: "path without leading slash", base: "https://shop.example", req: Request{Path: "V1/orders"}, wantErr: true},
 		{name: "empty path", base: "https://shop.example", req: Request{}, wantErr: true},
 		{name: "path with query", base: "https://shop.example", req: Request{Path: "/V1/orders?x=1"}, wantErr: true},
@@ -284,6 +284,108 @@ func TestURLJoin(t *testing.T) {
 				t.Errorf("origin = %s://%s", got.URL.Scheme, got.URL.Host)
 			}
 		})
+	}
+}
+
+// An empty store code renders no segment: Magento serves the default store
+// view at /rest/V1/...; a code scopes to that view (or "all").
+func TestStoreCodeSegment(t *testing.T) {
+	tests := []struct {
+		name        string
+		clientStore string
+		reqStore    string
+		path        string
+		want        string
+	}{
+		{name: "no store code", path: "/V1/orders", want: "/rest/V1/orders"},
+		{name: "request store code", reqStore: "ar", path: "/V1/orders", want: "/rest/ar/V1/orders"},
+		{name: "client store code", clientStore: "ar", path: "/V1/orders", want: "/rest/ar/V1/orders"},
+		{name: "request overrides client", clientStore: "ar", reqStore: "en", path: "/V1/orders", want: "/rest/en/V1/orders"},
+		{name: "schema under all", reqStore: "all", path: "/schema", want: "/rest/all/schema"},
+		{name: "explicit empty client code", clientStore: "", path: "/V1/orders", want: "/rest/V1/orders"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rt := &recordingRT{}
+			c := rtClient(t, rt, WithStoreCode(tt.clientStore))
+			if _, err := c.Do(context.Background(), Request{Path: tt.path, StoreCode: tt.reqStore}); err != nil {
+				t.Fatal(err)
+			}
+			if got := rt.last().URL.EscapedPath(); got != tt.want {
+				t.Fatalf("path = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// Every path the reference path validator accepts must reach the wire
+// unchanged, both whole (store code inside Path) and split into StoreCode
+// plus the /V1 rest.
+func TestPathAcceptanceParity(t *testing.T) {
+	tests := []struct {
+		path      string // as the validator accepts it
+		wantStore string
+		wantRest  string
+	}{
+		{"/V1/orders", "", "/V1/orders"},
+		{"/V1/orders/42", "", "/V1/orders/42"},
+		{"/V1/store/storeConfigs", "", "/V1/store/storeConfigs"},
+		{"/V1/products/24-MB01", "", "/V1/products/24-MB01"},
+		{"/V1/products/WS12%20Blue", "", "/V1/products/WS12%20Blue"},
+		{"/ar/V1/orders", "ar", "/V1/orders"},
+		{"/all/V1/store/storeViews", "all", "/V1/store/storeViews"},
+		{"/default/V1/products/sku_1.2", "default", "/V1/products/sku_1.2"},
+		{"/Default/V1/orders", "Default", "/V1/orders"},
+		{"/DE_shop2/V1/orders", "DE_shop2", "/V1/orders"},
+		{"/" + strings.Repeat("a", 32) + "/V1/orders", strings.Repeat("a", 32), "/V1/orders"},
+		{"/all/schema", "all", "/schema"},
+		// The segment alphabet [A-Za-z0-9._~%:,+=-], escapes sent verbatim.
+		{"/V1/products/a.b_c~d:e,f+g=h-i", "", "/V1/products/a.b_c~d:e,f+g=h-i"},
+		{"/V1/products/a%2Fb", "", "/V1/products/a%2Fb"},
+		{"/V1/products/%E2%82%AC%2B%25", "", "/V1/products/%E2%82%AC%2B%25"},
+		{"/V1/products/sku%2fLower", "", "/V1/products/sku%2fLower"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			for _, req := range []Request{
+				{Path: tt.path},
+				{Path: tt.wantRest, StoreCode: tt.wantStore},
+			} {
+				rt := &recordingRT{}
+				c := rtClient(t, rt)
+				if _, err := c.Do(context.Background(), req); err != nil {
+					t.Fatalf("Do(%+v): %v", req, err)
+				}
+				if got, want := rt.last().URL.EscapedPath(), "/rest"+tt.path; got != want {
+					t.Fatalf("Do(%+v) sent %q, want %q", req, got, want)
+				}
+				if got, want := rt.last().URL.RequestURI(), "/rest"+tt.path; got != want {
+					t.Fatalf("Do(%+v) request URI %q, want %q", req, got, want)
+				}
+			}
+		})
+	}
+}
+
+// A "fields" key in Query is sent as given when Fields is empty, and the
+// query string on the wire is exactly url.Values.Encode (sorted by key).
+func TestQueryReachesWireAsEncoded(t *testing.T) {
+	q := url.Values{
+		"searchCriteria[pageSize]":    {"10"},
+		"fields":                      {"items[sku,name],total_count"},
+		"searchCriteria[currentPage]": {"2"},
+		"a":                           {"2", "1"},
+	}
+	rt := &recordingRT{}
+	c := rtClient(t, rt)
+	if _, err := c.Do(context.Background(), Request{Path: "/V1/products", Query: q}); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := rt.last().URL.RawQuery, q.Encode(); got != want {
+		t.Fatalf("RawQuery = %q, want %q", got, want)
+	}
+	if got := rt.last().URL.Query()["fields"]; len(got) != 1 || got[0] != "items[sku,name],total_count" {
+		t.Fatalf("fields = %q", got)
 	}
 }
 
@@ -375,7 +477,7 @@ func TestFollowRedirects(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var hits atomic.Int32
 			mux := http.NewServeMux()
-			mux.HandleFunc("/rest/default/V1/x", func(w http.ResponseWriter, r *http.Request) {
+			mux.HandleFunc("/rest/V1/x", func(w http.ResponseWriter, r *http.Request) {
 				http.Redirect(w, r, "/elsewhere", http.StatusFound)
 			})
 			mux.HandleFunc("/elsewhere", func(w http.ResponseWriter, r *http.Request) {
@@ -532,7 +634,7 @@ func TestRequestHook(t *testing.T) {
 	if rt.count() != 0 {
 		t.Fatal("a request the hook refused was sent")
 	}
-	if seen == nil || seen.URL.String() != "https://shop.example/rest/default/V1/orders?a=1" || seen.Header.Get("Authorization") != "Bearer tok" {
+	if seen == nil || seen.URL.String() != "https://shop.example/rest/V1/orders?a=1" || seen.Header.Get("Authorization") != "Bearer tok" {
 		t.Fatalf("hook saw %+v, want the fully built request", seen)
 	}
 }

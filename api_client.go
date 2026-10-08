@@ -13,8 +13,10 @@ import (
 // (NewAPIClientFromIntegration, NewAPIClientFromAuthentication,
 // NewAPIClientWithoutAuthentication). New takes the store root URL instead.
 type StoreConfig struct {
-	Scheme    string
-	HostName  string // may include a port, e.g. "shop.example.com:8080"
+	Scheme   string
+	HostName string // may include a port, e.g. "shop.example.com:8080"
+	// StoreCode scopes requests to a store view; empty sends no store
+	// segment (/rest/V1/...), which reaches the default store view.
 	StoreCode string
 	// BasePath is an optional path prefix for Magento installations served
 	// from a sub-directory, e.g. "shop" results in
@@ -32,9 +34,13 @@ func (storeConfig *StoreConfig) root() string {
 	return base
 }
 
-// baseURL builds {scheme}://{host}[/basePath]/rest/{storeCode}/V1, the
-// prefix the compat route helpers resolve their routes against.
+// baseURL builds {scheme}://{host}[/basePath]/rest[/{storeCode}]/V1, the
+// prefix the compat route helpers resolve their routes against; an empty
+// StoreCode adds no segment (the default store view).
 func (storeConfig *StoreConfig) baseURL() string {
+	if storeConfig.StoreCode == "" {
+		return storeConfig.root() + "/rest/V1"
+	}
 	return storeConfig.root() + "/rest/" + storeConfig.StoreCode + "/V1"
 }
 
@@ -87,7 +93,7 @@ func NewAPIClientFromIntegration(storeConfig *StoreConfig, bearer string, opts .
 
 // GetRouteAndDecodeCtx performs a GET request on route with the given
 // context, decoding the JSON response into target (which must be a pointer).
-// route is relative to /rest/{storeCode}/V1 and may carry a query string
+// route is relative to /rest[/{storeCode}]/V1 and may carry a query string
 // ("/orders?searchCriteria..."); new code should use DoJSON.
 func (c *Client) GetRouteAndDecodeCtx(ctx context.Context, route string, target any, tryTo string) error {
 	return c.routeAndDecode(ctx, http.MethodGet, route, nil, target, tryTo)

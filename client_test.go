@@ -46,6 +46,12 @@ func TestBaseURLBuilding(t *testing.T) {
 			wantURL: "https://shop.example.com/rest/default/V1/products",
 		},
 		{
+			name:    "empty store code sends no segment",
+			config:  StoreConfig{Scheme: "https", HostName: "shop.example.com"},
+			want:    "https://shop.example.com/rest/V1",
+			wantURL: "https://shop.example.com/rest/V1/products",
+		},
+		{
 			name:    "host with port",
 			config:  StoreConfig{Scheme: "http", HostName: "localhost:8080", StoreCode: "default"},
 			want:    "http://localhost:8080/rest/default/V1",

@@ -33,9 +33,6 @@ const (
 	// far below it with the default policy (500ms base, 4 retries gives at
 	// most ~4s).
 	DefaultRetryMaxWaitTime = 2 * time.Minute
-	// DefaultStoreCode is the store code used when neither WithStoreCode nor
-	// Request.StoreCode names one.
-	DefaultStoreCode = "default"
 	// DefaultUserAgent is sent unless WithUserAgent overrides it.
 	DefaultUserAgent = "go-m2rest"
 )
@@ -183,9 +180,11 @@ func WithUserAgent(ua string) ClientOption { return func(c *config) { c.userAgen
 // header or a body is never logged. nil discards.
 func WithLogger(l *slog.Logger) ClientOption { return func(c *config) { c.logger = l } }
 
-// WithStoreCode sets the store code requests are scoped to (the {store}
-// in /rest/{store}/V1/...); Request.StoreCode overrides it per request.
-// Default DefaultStoreCode.
+// WithStoreCode sets the store code requests are scoped to: a non-empty
+// code renders /rest/{code}{Request.Path}; empty (the default) renders no
+// segment, /rest{Request.Path}, which Magento serves from the default store
+// view whatever its code. A non-empty Request.StoreCode overrides it per
+// request. A code must match [A-Za-z0-9_]+.
 func WithStoreCode(code string) ClientOption { return func(c *config) { c.storeCode = code } }
 
 // WithAllowedMethods restricts the HTTP methods the Client sends; any other
@@ -235,7 +234,9 @@ func WithResponseHook(hook func(context.Context, *http.Response) error) ClientOp
 
 // New returns a Client for the store at baseURL, the store root with an
 // optional path prefix ("https://shop.example", "https://shop.example/magento");
-// requests go to {baseURL}/rest/{storeCode}{Request.Path}.
+// requests go to {baseURL}/rest{Request.Path}, or
+// {baseURL}/rest/{storeCode}{Request.Path} when a store code is set (see
+// WithStoreCode).
 //
 // Without WithHTTPClient the Client builds its own *http.Client: no cookie
 // jar, WithTimeout's timeout, redirects per WithFollowRedirects, and a clone
@@ -247,7 +248,6 @@ func New(baseURL string, opts ...ClientOption) (*Client, error) {
 		followRedirects: true,
 		timeout:         DefaultTimeout,
 		userAgent:       DefaultUserAgent,
-		storeCode:       DefaultStoreCode,
 		retry:           retryPolicy{count: DefaultRetryCount, wait: DefaultRetryWaitTime, maxWait: DefaultRetryMaxWaitTime},
 	}
 	for _, opt := range opts {
@@ -274,7 +274,7 @@ func New(baseURL string, opts ...ClientOption) (*Client, error) {
 	if !validUserAgent(cfg.userAgent) {
 		return nil, errors.New("magento2: user agent must be non-empty printable ASCII")
 	}
-	if !storeCodeRe.MatchString(cfg.storeCode) {
+	if cfg.storeCode != "" && !storeCodeRe.MatchString(cfg.storeCode) {
 		return nil, fmt.Errorf("magento2: invalid store code %q", cfg.storeCode)
 	}
 	if cfg.retry.count < 0 || cfg.retry.wait < 0 || cfg.retry.maxWait < 0 {
@@ -400,8 +400,9 @@ type Request struct {
 	// "/schema". Percent-escapes are sent exactly as written; '?', '#',
 	// control characters and "." / ".." segments are refused.
 	Path string
-	// StoreCode overrides the Client's store code for this request ("all"
-	// for /rest/all/schema).
+	// StoreCode, when non-empty, overrides the Client's store code for this
+	// request ("all" for /rest/all/schema). When both are empty no store
+	// segment is sent: /rest/V1/... reaches the default store view.
 	StoreCode string
 	// Query is encoded into the URL; it is never logged or put into errors.
 	Query url.Values
@@ -647,10 +648,14 @@ func (c *Client) buildURL(req Request) (string, error) {
 	if req.StoreCode != "" {
 		store = req.StoreCode
 	}
-	if !storeCodeRe.MatchString(store) {
-		return "", fmt.Errorf("magento2: invalid store code %q", store)
+	target := c.base + "/rest"
+	if store != "" {
+		if !storeCodeRe.MatchString(store) {
+			return "", fmt.Errorf("magento2: invalid store code %q", store)
+		}
+		target += "/" + store
 	}
-	target := c.base + "/rest/" + store + p
+	target += p
 	u, err := url.Parse(target)
 	if err != nil {
 		return "", bad("not a valid URL path")
